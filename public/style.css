@@ -218,6 +218,15 @@ input { font-family: inherit; color: var(--text); }
 }
 .screen > * { flex: none; }
 .screen .spacer { flex: 1; min-height: 8px; }
+
+/* ---------- Footer: derechos reservados + logos (misma altura) ---------- */
+.site-footer { margin-top: auto; padding-top: 22px; display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--muted); text-align: center; flex: none; }
+.site-footer .sf-logos { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.site-footer .sf-logos img { display: block; height: 36px; width: auto; border-radius: 9px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.08); }
+.site-footer small { font-size: 11px; letter-spacing: 0.02em; }
+.site-footer.compact { margin-top: 0; padding: 10px 8px; border-top: 1px solid var(--line); gap: 6px; }
+.site-footer.compact .sf-logos img { height: 28px; }
+.site-footer.compact small { font-size: 10px; }
 .logo { width: min(86vw, 420px); height: auto; display: block; border-radius: 22px; filter: drop-shadow(0 0 24px rgba(0, 229, 255, 0.25)); }
 .logo.sm { width: min(70vw, 260px); }
 
