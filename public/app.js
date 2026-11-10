@@ -137,8 +137,22 @@
   function showPass(show) {
     $('#pass-wrap').classList.toggle('hidden', !show);
     $('#login-btn').textContent = show ? 'Entrar' : 'Entrar al chat';
-    if (!show) $('#pass').value = '';
+    if (!show) { $('#pass').value = ''; setEye(false); }
   }
+
+  /* 👁️ mostrar / ocultar la contraseña */
+  function setEye(on) {
+    $('#pass').type = on ? 'text' : 'password';
+    const b = $('#btn-eye');
+    b.textContent = on ? '🙈' : '👁️';
+    b.title = on ? 'Ocultar contraseña' : 'Mostrar contraseña';
+    b.setAttribute('aria-label', b.title);
+    b.setAttribute('aria-pressed', String(on));
+  }
+  $('#btn-eye').addEventListener('click', () => {
+    setEye($('#pass').type === 'password');
+    $('#pass').focus();
+  });
 
   function doJoin(password) {
     if (!S.profile) return;

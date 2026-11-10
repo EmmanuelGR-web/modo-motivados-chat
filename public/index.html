@@ -35,7 +35,10 @@
       <!-- Solo aparece si el nombre es el de un expositor registrado (lo decide el servidor) -->
       <div id="pass-wrap" class="pass-wrap hidden">
         <label class="lbl" for="pass">🔑 Contraseña</label>
-        <input id="pass" class="field" type="password" autocomplete="current-password" placeholder="••••••••">
+        <div class="row">
+          <input id="pass" class="field" type="password" autocomplete="current-password" placeholder="••••••••">
+          <button type="button" id="btn-eye" class="icon-btn" title="Mostrar contraseña" aria-label="Mostrar contraseña" aria-pressed="false">👁️</button>
+        </div>
       </div>
 
       <p id="login-error" class="error" role="alert"></p>
