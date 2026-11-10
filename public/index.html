@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#05010f">
+  <meta name="color-scheme" content="dark light">
+  <title>Modo Motivados · Chat en vivo</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🎧%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&family=Russo+One&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/theme.js"></script>
+</head>
+<body>
+
+  <!-- INGRESO -->
+  <main id="screen-login" class="screen hidden">
+    <button type="button" class="icon-btn theme-fab" data-theme-toggle>🌙</button>
+    <img class="logo" src="/logo.png" alt="Modo Motivados Stream">
+    <form id="login-form" class="card" autocomplete="off" novalidate>
+      <h2 class="neon-text">Entrá a la sala</h2>
+      <p class="lead">Elegí cómo te van a ver los demás. Es gratis y no necesitás cuenta.</p>
+
+      <label class="lbl" for="name">Tu nombre</label>
+      <div class="row">
+        <input id="name" class="field" maxlength="20" placeholder="Ej: Sofi UTN" required>
+        <button type="button" id="btn-random" class="icon-btn" title="Nombre y avatar al azar" aria-label="Nombre y avatar al azar">🎲</button>
+      </div>
+
+      <label class="lbl">Tu avatar</label>
+      <div id="avatar-grid" class="avatar-grid" role="radiogroup" aria-label="Avatar"></div>
+
+      <p id="login-error" class="error" role="alert"></p>
+      <button class="btn btn-primary btn-block" type="submit">Entrar al chat</button>
+    </form>
+    <a class="mini-link" href="/admin">Soy expositor →</a>
+  </main>
+
+  <!-- ESTADOS (espera de aprobación, baneado, transmisión no iniciada, finalizada, etc.) -->
+  <main id="screen-state" class="screen hidden">
+    <button type="button" class="icon-btn theme-fab" data-theme-toggle>🌙</button>
+    <img class="logo sm" src="/logo.png" alt="Modo Motivados Stream">
+    <div class="card state-card">
+      <div id="st-icon" class="big"></div>
+      <h2 id="st-title" class="neon-text"></h2>
+      <p id="st-text" class="lead"></p>
+      <button id="st-btn" class="btn btn-primary hidden" type="button"></button>
+      <p><button id="st-leave" class="btn btn-ghost btn-sm" type="button">Cambiar nombre o avatar</button></p>
+    </div>
+  </main>
+
+  <!-- CHAT -->
+  <div id="app" class="hidden">
+    <header class="topbar">
+      <div class="brand">
+        <b id="room-title" class="neon-text">Modo Motivados</b>
+        <small><span id="room-pill" class="pill waiting">En espera</span><span id="room-online"></span></small>
+      </div>
+      <button type="button" class="icon-btn" data-theme-toggle>🌙</button>
+      <button id="btn-sound" class="icon-btn" type="button" title="Sonido de notificaciones" aria-label="Sonido de notificaciones">🔔</button>
+      <button id="btn-users" class="icon-btn" type="button" title="Quién está en la sala" aria-label="Personas en la sala">👥</button>
+      <button id="btn-me" class="icon-btn" type="button" title="Mi perfil" aria-label="Mi perfil"></button>
+    </header>
+
+    <div class="layout">
+      <section class="chat-col">
+        <nav id="tabs" class="tabs" aria-label="Conversaciones"></nav>
+        <div id="dm-head" class="dm-head hidden"></div>
+        <div id="banner" class="banner hidden"></div>
+        <div id="msgs" class="msgs" aria-live="polite"></div>
+        <button id="jump" class="btn btn-pink btn-sm jump hidden" type="button">↓ Mensajes nuevos</button>
+        <div id="picker-slot"></div>
+        <form id="composer" class="composer" autocomplete="off">
+          <button type="button" id="btn-emoji" class="icon-btn" aria-label="Emojis y stickers">😊</button>
+          <input id="input" class="field" maxlength="500" placeholder="Escribí un mensaje…" aria-label="Mensaje">
+          <button class="send" type="submit" aria-label="Enviar">➤</button>
+        </form>
+        <div id="composer-note" class="composer-note hidden"></div>
+      </section>
+
+      <aside id="users-col" class="users-col" aria-label="Personas en la sala">
+        <div class="users-head">
+          <h3><span>En la sala <span id="users-count"></span></span><button id="users-close" class="icon-btn drawer-close" type="button" aria-label="Cerrar">✕</button></h3>
+          <input id="users-search" class="field" placeholder="Buscar persona…" style="padding:8px 12px;font-size:14px">
+        </div>
+        <div id="users-list" class="users-list"></div>
+      </aside>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/shared.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

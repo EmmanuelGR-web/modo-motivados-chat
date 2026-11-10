@@ -1,0 +1,22 @@
+{
+  "name": "modo-motivados-chat",
+  "version": "1.0.0",
+  "description": "Chat en vivo para presentaciones tipo streaming (UTN) — oyentes + panel de expositores",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "express": "^5.3.0",
+    "socket.io": "^4.8.4"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.4"
+  }
+}

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#05010f">
+  <meta name="color-scheme" content="dark light">
+  <title>Panel de expositores · Modo Motivados</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E👑%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&family=Russo+One&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/theme.js"></script>
+</head>
+<body>
+
+  <!-- LOGIN -->
+  <main id="screen-login" class="screen hidden">
+    <button type="button" class="icon-btn theme-fab" data-theme-toggle>🌙</button>
+    <img class="logo sm" src="/logo.png" alt="Modo Motivados Stream">
+    <form id="login-form" class="card" autocomplete="off">
+      <h2 class="neon-text">Panel de expositores</h2>
+      <p class="lead">Entrá con la contraseña del grupo para manejar la transmisión.</p>
+      <label class="lbl" for="a-name">Tu nombre (así te ven en el chat)</label>
+      <input id="a-name" class="field" maxlength="20" placeholder="Ej: Emmanuel" autocomplete="off">
+      <label class="lbl" for="a-pass">Contraseña</label>
+      <input id="a-pass" class="field" type="password" autocomplete="current-password" placeholder="••••••••">
+      <p id="login-error" class="error" role="alert"></p>
+      <button class="btn btn-primary btn-block" type="submit">Entrar al panel</button>
+    </form>
+    <a class="mini-link" href="/">← Volver al chat de oyentes</a>
+  </main>
+
+  <!-- PANEL -->
+  <div id="admin" class="admin hidden">
+    <header class="admin-top">
+      <div class="brand">
+        <b class="neon-text" id="a-title">Modo Motivados</b>
+        <small><span id="a-pill" class="pill waiting">En espera</span><span id="a-online"></span></small>
+      </div>
+      <div class="ctrl" id="ctrl"></div>
+      <div id="a-timer" class="timer hidden">00:00</div>
+      <button type="button" class="icon-btn" id="a-theme" data-theme-toggle>🌙</button>
+      <button id="a-sound" class="icon-btn" type="button" title="Sonido de avisos" aria-label="Sonido de avisos">🔔</button>
+    </header>
+
+    <div class="admin-sub">
+      <div class="linkbox">
+        <span>🔗 Link para oyentes:</span>
+        <input id="a-link" class="field" readonly aria-label="Link para oyentes">
+        <button id="a-copy" class="btn btn-sm" type="button">Copiar</button>
+        <button id="a-wsp" class="btn btn-sm" type="button">WhatsApp</button>
+      </div>
+      <label class="switch" title="Si está activado, cada oyente espera tu aprobación para entrar">
+        <input type="checkbox" id="a-approval"> <span>Pedir aprobación para entrar</span>
+      </label>
+      <button id="a-rename" class="btn btn-sm btn-ghost" type="button">✏️ Cambiar título</button>
+    </div>
+
+    <div class="admin-main">
+      <section class="panel" id="panel-users">
+        <div class="seg" id="seg">
+          <button data-tab="active" class="on" type="button">En sala <span class="cnt" id="c-active">0</span></button>
+          <button data-tab="pending" type="button">Solicitudes <span class="cnt" id="c-pending">0</span></button>
+          <button data-tab="banned" type="button">Baneados <span class="cnt" id="c-banned">0</span></button>
+        </div>
+        <div class="list-tools" id="list-tools"></div>
+        <div class="admin-list" id="a-list"></div>
+      </section>
+
+      <section class="panel" id="panel-chat">
+        <div class="msgs" id="msgs" aria-live="polite"></div>
+        <div id="picker-slot"></div>
+        <form id="composer" class="composer" autocomplete="off">
+          <button type="button" id="btn-emoji" class="icon-btn" aria-label="Emojis y stickers">😊</button>
+          <input id="input" class="field" maxlength="500" placeholder="Escribir como expositor…" aria-label="Mensaje">
+          <button class="send" type="submit" aria-label="Enviar">➤</button>
+        </form>
+      </section>
+    </div>
+
+    <nav class="bottom-nav" id="bottom-nav">
+      <button data-p="panel-chat" class="on" type="button">💬 Chat</button>
+      <button data-p="panel-users" type="button">👥 Oyentes <span class="badge hidden" id="nav-badge" style="top:4px;right:18%">0</span></button>
+    </nav>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/shared.js"></script>
+  <script src="/admin.js"></script>
+</body>
+</html>

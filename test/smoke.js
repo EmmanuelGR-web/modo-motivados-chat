@@ -1,0 +1,243 @@
+'use strict';
+// Prueba de humo: levanta el servidor y simula expositor + oyentes con socket.io-client.
+process.env.PORT = process.env.PORT || '3999';
+process.env.ADMIN_PASSWORD = 'test-pass';
+const assert = require('assert');
+const { io } = require('socket.io-client');
+require('../server');
+
+const URL = 'http://localhost:' + process.env.PORT;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const id = (n) => (n + '0'.repeat(16)).slice(0, 16) + 'abcd';
+const emitAck = (s, ev, d) => new Promise((res) => s.emit(ev, d, res));
+
+function client() {
+  const s = io(URL, { transports: ['websocket'], forceNew: true });
+  s.log = { you: [], chat: [], dm: [], dmFail: [], err: [], users: null, room: null, deleted: [] };
+  s.on('you:state', (v) => (s.you = v, s.log.you.push(v)));
+  s.on('chat:message', (m) => s.log.chat.push(m));
+  s.on('dm:message', (m) => s.log.dm.push(m));
+  s.on('dm:failed', (m) => s.log.dmFail.push(m));
+  s.on('chat:error', (m) => s.log.err.push(m));
+  s.on('chat:deleted', (m) => s.log.deleted.push(m));
+  s.on('users:list', (l) => (s.log.users = l));
+  s.on('room:state', (r) => (s.log.room = r));
+  s.on('admin:snapshot', (x) => (s.snap = x));
+  return new Promise((res) => s.on('connect', () => res(s)));
+}
+const test = async (name, fn) => { await fn(); console.log('  ✔', name); };
+
+(async () => {
+  await sleep(300);
+  const admin = await client();
+  const ana = await client();
+  const beto = await client();
+  const cami = await client();
+
+  await test('login de expositor: contraseña incorrecta falla, correcta entra', async () => {
+    assert.strictEqual((await emitAck(admin, 'admin:login', { name: 'X', password: 'mala' })).ok, false);
+    const r = await emitAck(admin, 'admin:login', { name: 'Emmanuel', password: 'test-pass' });
+    assert.ok(r.ok && r.token);
+    // un oyente no puede usar comandos de admin
+    ana.emit('room:start');
+    await sleep(150);
+    assert.strictEqual(admin.log.room.status, 'waiting');
+  });
+
+  await test('oyentes piden ingreso y quedan pendientes (aprobación activa)', async () => {
+    for (const [s, n, a] of [[ana, 'Ana', 1], [beto, 'Beto', 2], [cami, 'Cami', 3]]) {
+      const r = await emitAck(s, 'join', { clientId: id(n), name: n, avatar: a });
+      assert.ok(r.ok); assert.strictEqual(r.you.status, 'pending');
+    }
+    await sleep(300);
+    assert.strictEqual(admin.snap.users.filter((u) => u.status === 'pending').length, 3);
+  });
+
+  await test('nombres: repetido y reservado se rechazan', async () => {
+    const dup = await client();
+    assert.strictEqual((await emitAck(dup, 'join', { clientId: id('dup'), name: 'ana', avatar: 0 })).code, 'name_taken');
+    assert.strictEqual((await emitAck(dup, 'join', { clientId: id('dup'), name: 'Admin', avatar: 0 })).code, 'name_reserved');
+    assert.strictEqual((await emitAck(dup, 'join', { clientId: id('dup'), name: 'A', avatar: 0 })).code, 'name_short');
+    dup.close();
+  });
+
+  await test('aprobar a uno, aprobar a todos', async () => {
+    const uid = (n) => admin.snap.users.find((u) => u.name === n).uid;
+    admin.emit('mod:approve', { uid: uid('Ana') });
+    await sleep(250);
+    assert.strictEqual(ana.you.status, 'active');
+    assert.strictEqual(beto.you.status, 'pending');
+    admin.emit('mod:approveAll');
+    await sleep(250);
+    assert.strictEqual(beto.you.status, 'active');
+    assert.strictEqual(cami.you.status, 'active');
+  });
+
+  await test('chat cerrado hasta que el expositor inicia', async () => {
+    ana.emit('chat:send', { text: 'hola?' });
+    await sleep(150);
+    assert.strictEqual(ana.log.err.at(-1).code, 'waiting');
+    admin.emit('room:start');
+    await sleep(250);
+    assert.strictEqual(ana.log.room.status, 'live');
+  });
+
+  await test('mensajes públicos, stickers y validación', async () => {
+    ana.emit('chat:send', { text: '  <b>hola</b>   a todos  ' });
+    beto.emit('chat:send', { sticker: 'bravo' });
+    beto.emit('chat:send', { sticker: 'no-existe' });
+    admin.emit('chat:send', { text: 'Bienvenidos!' });
+    await sleep(300);
+    const texts = cami.log.chat.filter((m) => !m.system);
+    assert.strictEqual(texts.length, 3);
+    assert.strictEqual(texts[0].text, '<b>hola</b> a todos'); // el servidor no interpreta HTML; el cliente usa textContent
+    assert.strictEqual(texts[1].sticker, 'bravo');
+    assert.ok(texts[2].from.host);
+  });
+
+  await test('antispam: ráfaga de mensajes se limita', async () => {
+    for (let i = 0; i < 10; i++) cami.emit('chat:send', { text: 'spam ' + i });
+    await sleep(300);
+    assert.ok(cami.log.err.some((e) => e.code === 'rate'));
+  });
+
+  await test('mensajes privados: llegan solo a emisor y receptor', async () => {
+    const anaUid = ana.you.uid, betoUid = beto.you.uid;
+    ana.emit('dm:send', { to: betoUid, text: 'psst' });
+    await sleep(250);
+    assert.strictEqual(beto.log.dm.length, 1);
+    assert.strictEqual(ana.log.dm.length, 1); // eco al emisor
+    assert.strictEqual(cami.log.dm.length, 0);
+    assert.strictEqual(admin.log.dm.length, 0);
+    assert.strictEqual(beto.log.dm[0].from, anaUid);
+  });
+
+  await test('bloqueo: impide DMs en ambos sentidos', async () => {
+    beto.emit('block:set', { uid: ana.you.uid, blocked: true });
+    await sleep(200);
+    assert.ok(beto.you.blocked.includes(ana.you.uid));
+    ana.emit('dm:send', { to: beto.you.uid, text: 'sigo?' });
+    beto.emit('dm:send', { to: ana.you.uid, text: 'no podés' });
+    await sleep(250);
+    assert.strictEqual(ana.log.dmFail.at(-1).reason, 'not_receiving');
+    assert.strictEqual(beto.log.dmFail.at(-1).reason, 'you_blocked');
+    assert.strictEqual(beto.log.dm.length, 1);
+    // desbloquear
+    beto.emit('block:set', { uid: ana.you.uid, blocked: false });
+    await sleep(150);
+    ana.emit('dm:send', { to: beto.you.uid, text: 'ya?' });
+    await sleep(200);
+    assert.strictEqual(beto.log.dm.length, 2);
+  });
+
+  await test('suspender: no puede escribir (público ni privado) hasta restablecer', async () => {
+    const uid = ana.you.uid;
+    admin.emit('mod:suspend', { uid, minutes: 5 });
+    await sleep(200);
+    assert.ok(ana.you.suspendedUntil > Date.now());
+    const before = cami.log.chat.length;
+    ana.emit('chat:send', { text: 'no debería' });
+    ana.emit('dm:send', { to: beto.you.uid, text: 'tampoco' });
+    await sleep(250);
+    assert.strictEqual(cami.log.chat.length, before);
+    assert.strictEqual(ana.log.err.at(-1).code, 'suspended');
+    assert.strictEqual(ana.log.dmFail.at(-1).reason, 'suspended');
+    admin.emit('mod:restore', { uid });
+    await sleep(200);
+    assert.strictEqual(ana.you.suspendedUntil, 0);
+    ana.emit('chat:send', { text: 'ya puedo' });
+    await sleep(200);
+    assert.ok(cami.log.chat.some((m) => m.text === 'ya puedo'));
+  });
+
+  await test('pausa: nadie escribe; reanudar vuelve a habilitar', async () => {
+    admin.emit('room:pause');
+    await sleep(200);
+    beto.emit('chat:send', { text: 'en pausa' });
+    await sleep(150);
+    assert.strictEqual(beto.log.err.at(-1).code, 'paused');
+    admin.emit('room:start');
+    await sleep(200);
+    assert.strictEqual(beto.log.room.status, 'live');
+  });
+
+  await test('borrar mensaje (expositor)', async () => {
+    const m = cami.log.chat.find((x) => x.text === 'ya puedo');
+    admin.emit('mod:delete', { id: m.id });
+    await sleep(200);
+    assert.ok(cami.log.deleted.some((d) => d.id === m.id));
+  });
+
+  await test('expulsar: sale de la sala, puede volver a pedir ingreso', async () => {
+    admin.emit('mod:kick', { uid: cami.you.uid });
+    await sleep(250);
+    assert.strictEqual(cami.you.status, 'kicked');
+    cami.emit('chat:send', { text: 'fuera' });
+    await sleep(150);
+    assert.strictEqual(cami.log.err.at(-1).code, 'not_active');
+    const r = await emitAck(cami, 'join', { clientId: id('Cami'), name: 'Cami', avatar: 3 });
+    assert.strictEqual(r.you.status, 'pending');
+    admin.emit('mod:approve', { uid: cami.you.uid });
+    await sleep(200);
+    assert.strictEqual(cami.you.status, 'active');
+  });
+
+  await test('banear: no puede entrar (ni con otro nombre en el mismo navegador); restablecer lo devuelve', async () => {
+    admin.emit('mod:ban', { uid: beto.you.uid });
+    await sleep(250);
+    assert.strictEqual(beto.you.status, 'banned');
+    const r = await emitAck(beto, 'join', { clientId: id('Beto'), name: 'Otro Nombre', avatar: 2 });
+    assert.strictEqual(r.you.status, 'banned');
+    beto.emit('chat:send', { text: 'baneado' });
+    await sleep(150);
+    assert.strictEqual(beto.log.err.at(-1).code, 'not_active');
+    assert.ok(admin.snap.users.some((u) => u.status === 'banned' && u.name === 'Beto'));
+    // el nombre baneado queda reservado
+    const evader = await client();
+    assert.strictEqual((await emitAck(evader, 'join', { clientId: id('evader'), name: 'Beto', avatar: 2 })).code, 'name_taken');
+    evader.close();
+    admin.emit('mod:restore', { uid: beto.you.uid });
+    await sleep(250);
+    assert.strictEqual(beto.you.status, 'active'); // vuelve solo, sin recargar
+  });
+
+  await test('desactivar aprobación admite directo a los nuevos', async () => {
+    admin.emit('room:settings', { requireApproval: false });
+    await sleep(150);
+    const d = await client();
+    const r = await emitAck(d, 'join', { clientId: id('Dani'), name: 'Dani', avatar: 5 });
+    assert.strictEqual(r.you.status, 'active');
+    d.close();
+  });
+
+  await test('cortar: chat cerrado; iniciar de nuevo limpia el chat', async () => {
+    admin.emit('room:end');
+    await sleep(200);
+    assert.strictEqual(ana.log.room.status, 'ended');
+    ana.emit('chat:send', { text: 'tarde' });
+    await sleep(150);
+    assert.strictEqual(ana.log.err.at(-1).code, 'ended');
+    admin.emit('room:start');
+    await sleep(250);
+    assert.strictEqual(ana.log.room.status, 'live');
+  });
+
+  await test('sesión de expositor se puede reanudar con token; token falso no', async () => {
+    const r = await emitAck(admin, 'admin:login', { name: 'Emma', password: 'test-pass' });
+    const other = await client();
+    assert.strictEqual((await emitAck(other, 'admin:resume', { token: 'falso' })).ok, false);
+    assert.strictEqual((await emitAck(other, 'admin:resume', { token: r.token })).ok, true);
+    other.close();
+  });
+
+  await test('bloqueo de fuerza bruta tras 5 intentos fallidos', async () => {
+    const x = await client();
+    for (let i = 0; i < 5; i++) await emitAck(x, 'admin:login', { name: 'x', password: 'nope' + i });
+    const r = await emitAck(x, 'admin:login', { name: 'x', password: 'test-pass' });
+    assert.strictEqual(r.code, 'locked');
+    x.close();
+  });
+
+  console.log('\nTodas las pruebas pasaron ✅');
+  process.exit(0);
+})().catch((e) => { console.error('\n❌ Falló:', e); process.exit(1); });
