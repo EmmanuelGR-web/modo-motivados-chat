@@ -242,6 +242,43 @@ const test = async (name, fn) => { await fn(); console.log('  ✔', name); };
     assert.strictEqual(ana.log.room.status, 'live');
   });
 
+  await test('limpiar chat: borra el chat general para todos (solo expositor)', async () => {
+    admin.emit('room:start');
+    await sleep(150);
+    ana.emit('chat:send', { text: 'mensaje antes de limpiar' });
+    await sleep(200);
+    // un oyente no puede limpiar
+    beto.emit('mod:clear');
+    await sleep(150);
+    assert.ok(beto.log.chat.some((m) => m.text === 'mensaje antes de limpiar'));
+    let hist = null;
+    beto.once('chat:history', (l) => (hist = l));
+    admin.emit('mod:clear');
+    await sleep(250);
+    assert.deepStrictEqual(hist, []);
+    assert.ok(beto.log.chat.at(-1).system && /limpiado/.test(beto.log.chat.at(-1).text));
+    // al reconectarse (otra pestaña de Beto) no vuelven los mensajes viejos
+    const late = await client();
+    let lateHist = null;
+    late.on('chat:history', (l) => (lateHist = l));
+    await emitAck(late, 'join', { clientId: id('Beto'), name: 'Beto', avatar: 2 });
+    await sleep(200);
+    assert.ok(lateHist && !lateHist.some((m) => m.text === 'mensaje antes de limpiar'));
+    late.close();
+  });
+
+  await test('QR del link: /qr.svg y /qr.png responden con imagen', async () => {
+    const svg = await fetch(URL + '/qr.svg');
+    assert.strictEqual(svg.status, 200);
+    assert.match(svg.headers.get('content-type'), /image\/svg\+xml/);
+    assert.match(await svg.text(), /^<svg/);
+    const png = await fetch(URL + '/qr.png');
+    assert.strictEqual(png.status, 200);
+    assert.strictEqual(png.headers.get('content-type'), 'image/png');
+    const buf = Buffer.from(await png.arrayBuffer());
+    assert.strictEqual(buf.slice(1, 4).toString(), 'PNG');
+  });
+
   await test('sesión de expositor se puede reanudar con token; token falso no', async () => {
     const r = await adminJoin(admin, 'María Gómez', 'test-pass', 'adm2');
     const other = await client();

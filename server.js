@@ -19,6 +19,7 @@ const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
 const { Server } = require('socket.io');
+const QRCode = require('qrcode');
 
 const PORT = process.env.PORT || 3000;
 const DEFAULT_PASSWORD = '(definida en .env)';
@@ -48,6 +49,33 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 app.get('/health', (req, res) => res.json({ ok: true }));
+
+/* QR del link de oyentes (lo genera el servidor: la CSP no permite scripts externos).
+ * El link sale del propio pedido (con "trust proxy" en Render da https://…onrender.com/). */
+const qrCache = new Map();
+function listenerUrl(req) {
+  const host = String(req.get('host') || '').replace(/[^A-Za-z0-9.:-]/g, '');
+  return `${req.protocol}://${host}/`;
+}
+async function qrFor(url, type) {
+  const key = type + ' ' + url;
+  if (!qrCache.has(key)) {
+    if (qrCache.size > 20) qrCache.clear();
+    const opts = { errorCorrectionLevel: 'M', margin: 2, color: { dark: '#05010f', light: '#ffffff' } };
+    qrCache.set(key, type === 'svg' ? await QRCode.toString(url, { ...opts, type: 'svg' }) : await QRCode.toBuffer(url, { ...opts, width: 720 }));
+  }
+  return qrCache.get(key);
+}
+app.get('/qr.svg', async (req, res, next) => {
+  try {
+    res.type('image/svg+xml').set('Cache-Control', 'public, max-age=3600').send(await qrFor(listenerUrl(req), 'svg'));
+  } catch (e) { next(e); }
+});
+app.get('/qr.png', async (req, res, next) => {
+  try {
+    res.type('image/png').set('Cache-Control', 'public, max-age=3600').send(await qrFor(listenerUrl(req), 'png'));
+  } catch (e) { next(e); }
+});
 
 const server = http.createServer(app);
 const io = new Server(server, { maxHttpBufferSize: 1e5 });
@@ -513,6 +541,11 @@ io.on('connection', (socket) => {
       sendYou(u);
       scheduleBroadcast();
     }
+  });
+  onAdmin('mod:clear', () => {
+    messages = [];
+    io.to('active').to('admins').emit('chat:history', []);
+    pushMessage({ system: true, text: '🧹 El chat fue limpiado por un expositor' });
   });
   onAdmin('mod:delete', (d) => {
     const id = Number(d.id);

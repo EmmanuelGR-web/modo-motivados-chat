@@ -11,7 +11,9 @@ Chat en tiempo real para la presentación tipo streaming del grupo: los **oyente
 - Aprobar o rechazar a cada oyente antes de entrar (se puede desactivar para entrada libre).
 - Por oyente: **suspender** (1, 5, 10, 30 min o hasta restablecer), **expulsar**, **banear** y **restablecer**.
 - Lista de solicitudes, de oyentes en sala y de baneados.
-- Escribir como expositor (con insignia 👑), borrar mensajes, copiar el link o compartirlo por WhatsApp.
+- Escribir como expositor (con insignia 👑), borrar mensajes sueltos o **limpiar todo el chat general**.
+- **📤 Compartir:** código QR del link (para proyectarlo o mandarlo como imagen), enviar por WhatsApp y copiar link.
+- Interruptor de **sonido del chat** (mensajes y avisos de solicitudes).
 
 **Oyentes**
 - Nombre + avatar estilo Kahoot (o nombre y avatar al azar con 🎲).
@@ -67,7 +69,7 @@ Te imprime un `https://xxxx.trycloudflare.com` para compartir. Funciona mientras
 ## Cómo se usa el día de la presentación
 
 1. Entrá al link, escribí tu nombre de expositor (el registrado en `ADMIN_NAMES`) y la contraseña. Los demás expositores entran igual, cada uno con su nombre y la misma contraseña. Para salir del panel, botón 🚪.
-2. Compartí el link de oyentes (botón **WhatsApp** o **Copiar**).
+2. Tocá **📤 Compartir**: proyectá el QR para que lo escaneen, o mandá el link por WhatsApp.
 3. Los oyentes entran a una sala de espera. Aprobalos desde **Solicitudes** (o **Aceptar a todos**).
 4. Tocá **Iniciar transmisión**: el chat se abre para todos.
 5. Si alguien molesta: tocá **Acciones** en su fila → suspender, expulsar o banear. Los baneados se restablecen desde la pestaña **Baneados**.

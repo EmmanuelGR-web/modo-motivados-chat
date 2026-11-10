@@ -35,21 +35,21 @@
       <div class="ctrl" id="ctrl"></div>
       <div id="a-timer" class="timer hidden">00:00</div>
       <button type="button" class="icon-btn" id="a-theme" data-theme-toggle>🌙</button>
-      <button id="a-sound" class="icon-btn" type="button" title="Sonido de avisos" aria-label="Sonido de avisos">🔔</button>
       <button id="a-logout" class="icon-btn" type="button" title="Cerrar sesión" aria-label="Cerrar sesión">🚪</button>
     </header>
 
     <div class="admin-sub">
-      <div class="linkbox">
-        <span>🔗 Link para oyentes:</span>
-        <input id="a-link" class="field" readonly aria-label="Link para oyentes">
-        <button id="a-copy" class="btn btn-sm" type="button">Copiar</button>
-        <button id="a-wsp" class="btn btn-sm" type="button">WhatsApp</button>
-      </div>
+      <button id="a-share" class="btn btn-sm btn-primary" type="button">📤 Compartir</button>
       <label class="switch" title="Si está activado, cada oyente espera tu aprobación para entrar">
-        <input type="checkbox" id="a-approval"> <span>Pedir aprobación para entrar</span>
+        <input type="checkbox" id="a-approval"> <span>Pedir aprobación<span class="hide-sm"> para entrar</span></span>
       </label>
-      <button id="a-rename" class="btn btn-sm btn-ghost" type="button">✏️ Cambiar título</button>
+      <label class="switch" title="Sonido de los mensajes del chat y de los avisos de solicitudes">
+        <input type="checkbox" id="a-sound"> <span id="a-sound-lbl"><span id="a-sound-ico">🔔</span> Sonido<span class="hide-sm"> del chat</span></span>
+      </label>
+      <div class="sub-actions">
+        <button id="a-clear" class="btn btn-sm btn-ghost" type="button" title="Limpiar chat">🧹 Limpiar<span class="hide-sm"> chat</span></button>
+        <button id="a-rename" class="btn btn-sm btn-ghost" type="button" title="Cambiar título">✏️ <span class="hide-sm">Cambiar título</span><span class="show-sm">Título</span></button>
+      </div>
     </div>
 
     <div class="admin-main">

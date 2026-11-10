@@ -102,8 +102,8 @@
     p.textContent = STATUS_TXT[A.room.status] || '';
     $('#a-online').textContent = ' · ' + (A.room.online || 0) + ' oyentes conectados';
     $('#a-approval').checked = !!A.room.requireApproval;
-    $('#a-sound').textContent = prefs.sound ? '🔔' : '🔕';
-    $('#a-sound').classList.toggle('off', !prefs.sound);
+    $('#a-sound').checked = !!prefs.sound;
+    $('#a-sound-ico').textContent = prefs.sound ? '🔔' : '🔕';
     renderControls();
     tickTimer();
   }
@@ -126,29 +126,96 @@
     const t = prompt('Título de la sala:', A.room.title);
     if (t && t.trim()) A.socket.emit('room:settings', { title: t.trim() });
   });
-  $('#a-sound').addEventListener('click', () => {
+  $('#a-sound').addEventListener('change', (e) => {
     MM.sound.unlock();
-    prefs.sound = !prefs.sound;
+    prefs.sound = e.target.checked;
     MM.prefs.save();
     renderTop();
+    MM.toast(prefs.sound ? '🔔 Sonido del chat activado' : '🔕 Sonido del chat apagado');
   });
 
+  $('#a-clear').addEventListener('click', async () => {
+    const ok = await MM.confirm(
+      '¿Limpiar el chat general?',
+      'Se borran todos los mensajes de la sala para todos los oyentes. No se puede deshacer. (Los mensajes privados entre oyentes no se tocan.)',
+      'Sí, limpiar'
+    );
+    if (ok) A.socket.emit('mod:clear');
+  });
+
+  /* ------------------------------------------------------------- Compartir */
+
   const listenerLink = location.origin + '/';
-  $('#a-link').value = listenerLink;
-  $('#a-link').addEventListener('focus', (e) => e.target.select());
-  $('#a-copy').addEventListener('click', async () => {
+  const SHARE_TEXT = '🎧 Sumate al chat en vivo de Modo Motivados: ' + listenerLink;
+
+  async function copyLink() {
     try {
       await navigator.clipboard.writeText(listenerLink);
     } catch (e) {
-      $('#a-link').select();
+      const tmp = h('textarea', { style: { position: 'fixed', opacity: '0' } });
+      tmp.value = listenerLink;
+      document.body.append(tmp);
+      tmp.select();
       document.execCommand('copy');
+      tmp.remove();
     }
     MM.toast('📋 Link copiado');
-  });
-  $('#a-wsp').addEventListener('click', () => {
-    const text = '🎧 Sumate al chat en vivo: ' + listenerLink;
-    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener');
-  });
+  }
+
+  function sendWhatsApp() {
+    window.open('https://wa.me/?text=' + encodeURIComponent(SHARE_TEXT), '_blank', 'noopener');
+  }
+
+  // En celular abre el menú de compartir del sistema con la imagen; en la compu (o si no se puede) la descarga.
+  async function shareQR() {
+    try {
+      const blob = await (await fetch('/qr.png')).blob();
+      const file = new File([blob], 'modo-motivados-qr.png', { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Modo Motivados', text: SHARE_TEXT });
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const a = h('a', { href: url, download: file.name });
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      MM.toast('⬇️ QR descargado como imagen');
+    } catch (e) {
+      if (e && e.name !== 'AbortError') MM.toast('No se pudo compartir el QR');
+    }
+  }
+
+  function openShare() {
+    const close = () => back.remove();
+    const btn = (cls, text, fn) => h('button', { type: 'button', class: 'btn ' + cls, text, onclick: fn });
+    const back = h(
+      'div',
+      { class: 'sheet-back center', onclick: (e) => e.target === back && close() },
+      h(
+        'div',
+        { class: 'sheet share-sheet', role: 'dialog', 'aria-label': 'Compartir la sala' },
+        h(
+          'div',
+          { class: 'sheet-head' },
+          h('div', { class: 'sheet-title' }, h('strong', { text: '📤 Compartir la sala' }), h('small', { text: 'Escaneá el QR o mandá el link' })),
+          h('button', { type: 'button', class: 'sheet-x', 'aria-label': 'Cerrar', text: '✕', onclick: close })
+        ),
+        h('div', { class: 'qr-box' }, h('img', { src: '/qr.svg', alt: 'Código QR del link de la sala', width: '260', height: '260' })),
+        h('div', { class: 'share-link', text: listenerLink }),
+        h(
+          'div',
+          { class: 'share-btns' },
+          btn('btn-wsp', '💬 Enviar por WhatsApp', sendWhatsApp),
+          btn('btn-primary', '🖼️ Compartir QR', shareQR),
+          btn('btn-ghost', '📋 Copiar link', copyLink)
+        )
+      )
+    );
+    document.body.append(back);
+  }
+  $('#a-share').addEventListener('click', openShare);
 
   /* ----------------------------------------------------- Lista de personas */
 
