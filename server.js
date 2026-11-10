@@ -4,15 +4,18 @@
  * Modo Motivados — chat en vivo para presentaciones tipo streaming.
  * Node + Express + Socket.IO. Estado en memoria (una sala por servidor).
  *
- * Variables de entorno:
+ * Configuración: variables de entorno. En la compu se cargan desde el archivo .env
+ * (copiar .env.example → .env); en el hosting se cargan en su panel. Nunca se suben al repositorio.
  *   PORT              puerto (lo define el hosting)
- *   ADMIN_PASSWORD    contraseña de los expositores
- *   ADMIN_NAMES       nombres de los expositores separados por coma (ej: "Juan Pérez, María Gómez").
+ *   ADMIN_PASSWORD    contraseña de los expositores (obligatoria para que alguien pueda moderar)
+ *   ADMIN_NAMES       nombres de los expositores separados por coma.
  *                     Hay un solo ingreso para todos: si alguien escribe uno de estos nombres,
  *                     se le pide la contraseña y entra como expositor.
  *   EVENT_TITLE       título inicial de la sala
  *   KEEPALIVE_URL     URL pública para auto-ping (en Render se usa RENDER_EXTERNAL_URL solo)
  */
+
+require('dotenv').config({ quiet: true }); // lee .env si existe (no pisa variables ya definidas)
 
 const http = require('http');
 const path = require('path');
@@ -22,10 +25,9 @@ const { Server } = require('socket.io');
 const QRCode = require('qrcode');
 
 const PORT = process.env.PORT || 3000;
-const DEFAULT_PASSWORD = '(definida en .env)';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || DEFAULT_PASSWORD;
-const DEFAULT_ADMIN_NAMES = 'Juan Pérez';
-const ADMIN_NAMES_RAW = process.env.ADMIN_NAMES || DEFAULT_ADMIN_NAMES;
+// Sin valores por defecto en el código: si falta la contraseña, nadie puede entrar como expositor.
+const ADMIN_PASSWORD = String(process.env.ADMIN_PASSWORD || '');
+const ADMIN_NAMES_RAW = String(process.env.ADMIN_NAMES || '');
 const AVATAR_COUNT = 16;
 const MAX_MESSAGES = 500;
 const STICKERS = require('./public/stickers.json');
@@ -102,7 +104,8 @@ let msgSeq = 0;
 /* ------------------------------------------------------------- Helpers */
 
 const sha = (s) => crypto.createHash('sha256').update(String(s)).digest();
-const checkPassword = (p) => crypto.timingSafeEqual(sha(p), sha(ADMIN_PASSWORD));
+// sin ADMIN_PASSWORD configurada no se acepta ninguna contraseña
+const checkPassword = (p) => !!ADMIN_PASSWORD && crypto.timingSafeEqual(sha(p), sha(ADMIN_PASSWORD));
 
 // quita caracteres de control y de dirección (RTL override), conserva ZWJ de los emojis
 const CTRL = /[\u0000-\u001f\u007f-\u009f​‌‎‏‪-‮⁠-⁤⁦-⁩﻿]/g;
@@ -644,14 +647,10 @@ if (KEEPALIVE_URL && typeof fetch === 'function') {
 server.listen(PORT, () => {
   console.log(`\n  🎧  Modo Motivados corriendo en el puerto ${PORT}`);
   console.log(`      Ingreso (oyentes y expositores): http://localhost:${PORT}/`);
-  console.log(`      Expositores registrados: ${[...ADMIN_NAMES.values()].join(', ')}`);
-  if (KEEPALIVE_URL) console.log(`      Keep-alive activo: ${KEEPALIVE_URL}/health cada 10 min`);
-  if (ADMIN_PASSWORD === DEFAULT_PASSWORD) {
-    console.log('\n  ⚠️  Estás usando la contraseña por defecto. Definí ADMIN_PASSWORD antes de publicar.');
-  }
-  if (!process.env.ADMIN_NAMES) {
-    console.log(`  ⚠️  ADMIN_NAMES no está definida: se usa el ejemplo "${DEFAULT_ADMIN_NAMES}".`);
-  }
+  console.log(`      Expositores registrados: ${ADMIN_NAMES.size}`);
+  if (KEEPALIVE_URL) console.log('      Keep-alive activo cada 10 min');
+  if (!ADMIN_PASSWORD) console.log('\n  ⚠️  Falta ADMIN_PASSWORD (archivo .env o panel del hosting): nadie podrá entrar como expositor.');
+  if (!ADMIN_NAMES.size) console.log('  ⚠️  Falta ADMIN_NAMES (archivo .env o panel del hosting): no hay expositores registrados.');
   console.log('');
 });
 
