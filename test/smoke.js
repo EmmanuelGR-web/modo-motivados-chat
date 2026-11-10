@@ -2,6 +2,9 @@
 // Prueba de humo: levanta el servidor y simula expositor + oyentes con socket.io-client.
 process.env.PORT = process.env.PORT || '3999';
 process.env.ADMIN_PASSWORD = 'test-pass';
+process.env.ADMIN_NAMES = 'Juan Pérez, María Gómez';
+delete process.env.RENDER_EXTERNAL_URL;
+delete process.env.KEEPALIVE_URL;
 const assert = require('assert');
 const { io } = require('socket.io-client');
 require('../server');
@@ -10,6 +13,8 @@ const URL = 'http://localhost:' + process.env.PORT;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const id = (n) => (n + '0'.repeat(16)).slice(0, 16) + 'abcd';
 const emitAck = (s, ev, d) => new Promise((res) => s.emit(ev, d, res));
+// ingreso único: un expositor entra por 'join' con su nombre registrado + contraseña, y el panel reanuda con el token
+const adminJoin = (s, name, password, cid = 'adm') => emitAck(s, 'join', { clientId: id(cid), name, avatar: 0, password });
 
 function client() {
   const s = io(URL, { transports: ['websocket'], forceNew: true });
@@ -34,10 +39,25 @@ const test = async (name, fn) => { await fn(); console.log('  ✔', name); };
   const beto = await client();
   const cami = await client();
 
-  await test('login de expositor: contraseña incorrecta falla, correcta entra', async () => {
-    assert.strictEqual((await emitAck(admin, 'admin:login', { name: 'X', password: 'mala' })).ok, false);
-    const r = await emitAck(admin, 'admin:login', { name: 'Emmanuel', password: 'test-pass' });
-    assert.ok(r.ok && r.token);
+  await test('ingreso único: un nombre de expositor pide contraseña; incorrecta falla, correcta da rol admin', async () => {
+    // sin contraseña: el servidor pide la clave (no entra como oyente)
+    assert.strictEqual((await adminJoin(admin, 'Juan Pérez')).code, 'need_password');
+    // sin distinguir mayúsculas ni acentos
+    assert.strictEqual((await adminJoin(admin, 'juan perez')).code, 'need_password');
+    assert.strictEqual((await adminJoin(admin, 'Juan Pérez', 'mala')).code, 'bad_password');
+    const r = await adminJoin(admin, 'juan perez', 'test-pass');
+    assert.ok(r.ok && r.role === 'admin' && r.token);
+    assert.strictEqual(r.name, 'Juan Pérez'); // se muestra como está registrado
+    // el panel (/admin) toma el rol de expositor reanudando con ese token
+    assert.strictEqual((await emitAck(admin, 'admin:resume', { token: r.token })).ok, true);
+    // un oyente común nunca recibe rol admin ni pedido de contraseña
+    const plain = await client();
+    const p = await emitAck(plain, 'join', { clientId: id('plain'), name: 'Juan', avatar: 0, password: 'test-pass' });
+    assert.ok(p.ok && !p.role && p.you.status === 'pending');
+    plain.close();
+    // el viejo login separado ya no existe
+    const old = await new Promise((res) => { admin.emit('admin:login', { name: 'X', password: 'test-pass' }, res); setTimeout(() => res('sin respuesta'), 300); });
+    assert.strictEqual(old, 'sin respuesta');
     // un oyente no puede usar comandos de admin
     ana.emit('room:start');
     await sleep(150);
@@ -50,7 +70,7 @@ const test = async (name, fn) => { await fn(); console.log('  ✔', name); };
       assert.ok(r.ok); assert.strictEqual(r.you.status, 'pending');
     }
     await sleep(300);
-    assert.strictEqual(admin.snap.users.filter((u) => u.status === 'pending').length, 3);
+    assert.strictEqual(admin.snap.users.filter((u) => u.status === 'pending').length, 4); // + 'Juan' de la prueba anterior
   });
 
   await test('nombres: repetido y reservado se rechazan', async () => {
@@ -223,17 +243,21 @@ const test = async (name, fn) => { await fn(); console.log('  ✔', name); };
   });
 
   await test('sesión de expositor se puede reanudar con token; token falso no', async () => {
-    const r = await emitAck(admin, 'admin:login', { name: 'Emma', password: 'test-pass' });
+    const r = await adminJoin(admin, 'María Gómez', 'test-pass', 'adm2');
     const other = await client();
     assert.strictEqual((await emitAck(other, 'admin:resume', { token: 'falso' })).ok, false);
     assert.strictEqual((await emitAck(other, 'admin:resume', { token: r.token })).ok, true);
+    // cerrar sesión invalida el token
+    other.emit('admin:logout', { token: r.token });
+    await sleep(100);
+    assert.strictEqual((await emitAck(other, 'admin:resume', { token: r.token })).ok, false);
     other.close();
   });
 
   await test('bloqueo de fuerza bruta tras 5 intentos fallidos', async () => {
     const x = await client();
-    for (let i = 0; i < 5; i++) await emitAck(x, 'admin:login', { name: 'x', password: 'nope' + i });
-    const r = await emitAck(x, 'admin:login', { name: 'x', password: 'test-pass' });
+    for (let i = 0; i < 5; i++) await adminJoin(x, 'Juan Pérez', 'nope' + i, 'brute');
+    const r = await adminJoin(x, 'Juan Pérez', 'test-pass', 'brute');
     assert.strictEqual(r.code, 'locked');
     x.close();
   });

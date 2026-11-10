@@ -32,10 +32,15 @@
       <label class="lbl">Tu avatar</label>
       <div id="avatar-grid" class="avatar-grid" role="radiogroup" aria-label="Avatar"></div>
 
+      <!-- Solo aparece si el nombre es el de un expositor registrado (lo decide el servidor) -->
+      <div id="pass-wrap" class="pass-wrap hidden">
+        <label class="lbl" for="pass">🔑 Contraseña</label>
+        <input id="pass" class="field" type="password" autocomplete="current-password" placeholder="••••••••">
+      </div>
+
       <p id="login-error" class="error" role="alert"></p>
-      <button class="btn btn-primary btn-block" type="submit">Entrar al chat</button>
+      <button id="login-btn" class="btn btn-primary btn-block" type="submit">Entrar al chat</button>
     </form>
-    <a class="mini-link" href="/admin">Soy expositor →</a>
   </main>
 
   <!-- ESTADOS (espera de aprobación, baneado, transmisión no iniciada, finalizada, etc.) -->

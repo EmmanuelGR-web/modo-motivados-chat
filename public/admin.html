@@ -16,21 +16,13 @@
 </head>
 <body>
 
-  <!-- LOGIN -->
-  <main id="screen-login" class="screen hidden">
-    <button type="button" class="icon-btn theme-fab" data-theme-toggle>🌙</button>
+  <!-- VERIFICANDO SESIÓN (sin sesión válida se vuelve al ingreso único en "/") -->
+  <main id="screen-login" class="screen">
     <img class="logo sm" src="/logo.png" alt="Modo Motivados Stream">
-    <form id="login-form" class="card" autocomplete="off">
-      <h2 class="neon-text">Panel de expositores</h2>
-      <p class="lead">Entrá con la contraseña del grupo para manejar la transmisión.</p>
-      <label class="lbl" for="a-name">Tu nombre (así te ven en el chat)</label>
-      <input id="a-name" class="field" maxlength="20" placeholder="Ej: Emmanuel" autocomplete="off">
-      <label class="lbl" for="a-pass">Contraseña</label>
-      <input id="a-pass" class="field" type="password" autocomplete="current-password" placeholder="••••••••">
-      <p id="login-error" class="error" role="alert"></p>
-      <button class="btn btn-primary btn-block" type="submit">Entrar al panel</button>
-    </form>
-    <a class="mini-link" href="/">← Volver al chat de oyentes</a>
+    <div class="card state-card">
+      <div class="big pulse">⚡</div>
+      <p class="lead">Verificando acceso…</p>
+    </div>
   </main>
 
   <!-- PANEL -->
@@ -44,6 +36,7 @@
       <div id="a-timer" class="timer hidden">00:00</div>
       <button type="button" class="icon-btn" id="a-theme" data-theme-toggle>🌙</button>
       <button id="a-sound" class="icon-btn" type="button" title="Sonido de avisos" aria-label="Sonido de avisos">🔔</button>
+      <button id="a-logout" class="icon-btn" type="button" title="Cerrar sesión" aria-label="Cerrar sesión">🚪</button>
     </header>
 
     <div class="admin-sub">

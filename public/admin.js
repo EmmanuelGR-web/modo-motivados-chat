@@ -26,13 +26,20 @@
   const input = $('#input');
   const byUid = () => new Map(A.users.map((u) => [u.uid, u]));
 
-  /* ---------------------------------------------------------------- Login */
+  /* ------------------------------------------------------------- Sesión
+   * No hay formulario acá: el ingreso es único en "/" y el servidor detecta al expositor
+   * por su nombre registrado + contraseña. Este panel solo reanuda la sesión con el token.
+   */
 
-  function showLogin(msg) {
-    $('#screen-login').classList.remove('hidden');
-    $('#admin').classList.add('hidden');
-    $('#login-error').textContent = msg || '';
+  function clearSession() {
+    try { localStorage.removeItem('mm_admin_token'); } catch (e) { /* ignore */ }
+    A.token = null;
     A.ready = false;
+  }
+  function goToLogin(expired) {
+    clearSession();
+    try { if (expired) sessionStorage.setItem('mm_admin_expired', '1'); } catch (e) { /* ignore */ }
+    location.replace('/');
   }
   function showPanel() {
     $('#screen-login').classList.add('hidden');
@@ -41,36 +48,27 @@
     showMobilePanel(A.mobilePanel || 'panel-chat');
   }
 
-  function onAuth(res, fromLogin) {
-    if (!res || !res.ok) {
-      try { localStorage.removeItem('mm_admin_token'); } catch (e) { /* ignore */ }
-      A.token = null;
-      const msg = !fromLogin ? '' :
-        res && res.code === 'locked' ? 'Demasiados intentos. Esperá ' + res.retry + ' segundos.' : 'Contraseña incorrecta.';
-      return showLogin(msg);
-    }
+  function onAuth(res) {
+    if (!res || !res.ok) return goToLogin(true);
     A.token = res.token;
     A.name = res.name;
     A.hostUid = 'h-' + res.token.slice(0, 6);
-    try { localStorage.setItem('mm_admin_token', res.token); localStorage.setItem('mm_admin_name', res.name); } catch (e) { /* ignore */ }
+    try { localStorage.setItem('mm_admin_name', res.name); } catch (e) { /* ignore */ }
     showPanel();
   }
 
-  $('#login-form').addEventListener('submit', (e) => {
-    e.preventDefault();
-    MM.sound.unlock();
-    const password = $('#a-pass').value;
-    if (!password) return ($('#login-error').textContent = 'Escribí la contraseña.');
-    A.socket.emit('admin:login', { name: $('#a-name').value, password }, (res) => {
-      $('#a-pass').value = '';
-      onAuth(res, true);
-    });
-  });
-  try { $('#a-name').value = localStorage.getItem('mm_admin_name') || ''; } catch (e) { /* ignore */ }
+  // sin token no hay nada que ver acá: directo al ingreso
+  if (!A.token) location.replace('/');
 
   A.socket.on('connect', () => {
-    if (A.token) A.socket.emit('admin:resume', { token: A.token }, (res) => onAuth(res, false));
-    else showLogin();
+    if (A.token) A.socket.emit('admin:resume', { token: A.token }, onAuth);
+  });
+
+  $('#a-logout').addEventListener('click', async () => {
+    if (!(await MM.confirm('¿Cerrar sesión?', 'Vas a volver a la pantalla de ingreso. La transmisión sigue igual.', 'Cerrar sesión'))) return;
+    A.socket.emit('admin:logout', { token: A.token });
+    clearSession();
+    setTimeout(() => location.replace('/'), 150);
   });
 
   /* ------------------------------------------------------------- Controles */
@@ -381,5 +379,4 @@
 
   document.addEventListener('pointerdown', () => MM.sound.unlock(), { once: true });
   MM.stickersReady.then(() => A.ready && renderMsgs());
-  if (!A.token) showLogin();
 })();

@@ -243,6 +243,8 @@ label.lbl { display: block; font-size: 12px; font-weight: 600; letter-spacing: 0
 .field:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.2); }
 .row { display: flex; gap: 8px; align-items: center; }
 .error { color: var(--err); font-size: 13px; min-height: 18px; margin: 10px 0 0; }
+.pass-wrap { animation: pass-in 0.25s ease-out; }
+@keyframes pass-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 .mini-link { color: var(--muted); font-size: 13px; text-decoration: none; margin-top: 16px; }
 .mini-link:hover { color: var(--cyan-t); }
 .btn-block { width: 100%; margin-top: 12px; padding: 14px; font-size: 16px; }
@@ -500,8 +502,9 @@ label.lbl { display: block; font-size: 12px; font-weight: 600; letter-spacing: 0
   .bottom-nav button { flex: 1; padding: 11px 4px; border: 0; background: none; font-weight: 600; font-size: 13px; position: relative; }
   .bottom-nav button.on { color: var(--cyan-t); box-shadow: inset 0 2px 0 var(--cyan); }
   .admin-top { gap: 8px; padding: 8px 12px; }
-  .admin-top .brand { order: 1; flex: 1 1 0; }
-  #a-sound, #a-theme { order: 2; }
+  .admin-top .brand { order: 1; flex: 1 1 0; min-width: 0; }
+  .admin-top .brand small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #a-sound, #a-theme, #a-logout { order: 2; }
   .ctrl { order: 3; width: 100%; }
   .ctrl .btn { flex: 1; min-height: 42px; padding: 8px 12px; }
   .timer { display: none; }

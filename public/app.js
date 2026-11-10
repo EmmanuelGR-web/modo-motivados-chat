@@ -128,18 +128,45 @@
     name_reserved: 'Ese nombre está reservado. Probá con otro.',
     name_taken: 'Ya hay alguien con ese nombre. Elegí otro.',
     bad_client: 'No pudimos identificar tu navegador. Recargá la página.',
+    need_password: 'Escribí la contraseña para continuar.',
+    bad_password: 'Contraseña incorrecta.',
   };
+  const ADMIN_STEP = new Set(['need_password', 'bad_password', 'locked']);
 
-  function doJoin() {
+  /* El campo de contraseña solo aparece cuando el servidor reconoce el nombre de un expositor */
+  function showPass(show) {
+    $('#pass-wrap').classList.toggle('hidden', !show);
+    $('#login-btn').textContent = show ? 'Entrar' : 'Entrar al chat';
+    if (!show) $('#pass').value = '';
+  }
+
+  function doJoin(password) {
     if (!S.profile) return;
-    S.socket.emit('join', { clientId: MM.clientId(), name: S.profile.name, avatar: S.profile.avatar }, (res) => {
+    const data = { clientId: MM.clientId(), name: S.profile.name, avatar: S.profile.avatar };
+    if (typeof password === 'string' && password) data.password = password;
+    S.socket.emit('join', data, (res) => {
+      // Expositor: guardamos la sesión y pasamos al panel
+      if (res && res.ok && res.role === 'admin') {
+        try {
+          localStorage.setItem('mm_admin_token', res.token);
+          localStorage.setItem('mm_admin_name', res.name);
+          localStorage.removeItem('mm_profile');
+        } catch (e) { /* ignore */ }
+        return location.replace('/admin');
+      }
       if (!res || !res.ok) {
         const prev = S.profile;
+        const code = res && res.code;
         S.profile = null; S.me = null; S.changing = true;
         try { localStorage.removeItem('mm_profile'); } catch (e) { /* ignore */ }
         if (prev) { $('#name').value = prev.name; S.avatarSel = prev.avatar; buildAvatarGrid(); }
-        $('#login-error').textContent = ERR[res && res.code] || 'No pudimos entrar. Probá de nuevo.';
-        return render();
+        showPass(ADMIN_STEP.has(code));
+        $('#login-error').textContent =
+          code === 'locked' ? 'Demasiados intentos. Esperá ' + res.retry + ' segundos.' :
+          ERR[code] || 'No pudimos entrar. Probá de nuevo.';
+        render();
+        if (ADMIN_STEP.has(code)) $('#pass').focus();
+        return;
       }
       S.changing = false;
       S.me = res.you;
@@ -156,14 +183,42 @@
       $('#login-error').textContent = ERR.name_short;
       return $('#name').focus();
     }
+    const askingPass = !$('#pass-wrap').classList.contains('hidden');
+    const password = askingPass ? $('#pass').value : '';
+    if (askingPass && !password) {
+      $('#login-error').textContent = ERR.need_password;
+      return $('#pass').focus();
+    }
     $('#login-error').textContent = '';
+    $('#pass').value = '';
     S.profile = { name, avatar: S.avatarSel };
-    doJoin();
+    doJoin(password);
   });
+
+  // si cambia el nombre, la contraseña deja de aplicar
+  $('#name').addEventListener('input', () => {
+    if (!$('#pass-wrap').classList.contains('hidden')) {
+      showPass(false);
+      $('#login-error').textContent = '';
+    }
+  });
+
+  // el panel nos manda acá cuando la sesión de expositor venció (p. ej. el servidor se reinició)
+  try {
+    if (sessionStorage.getItem('mm_admin_expired')) {
+      sessionStorage.removeItem('mm_admin_expired');
+      S.changing = true;
+      S.profile = null;
+      $('#name').value = localStorage.getItem('mm_admin_name') || '';
+      showPass(true);
+      $('#login-error').textContent = 'Tu sesión de expositor terminó. Volvé a escribir la contraseña.';
+    }
+  } catch (e) { /* ignore */ }
 
   $('#btn-random').addEventListener('click', () => {
     const r = MM.randomIdentity();
     $('#name').value = r.name;
+    showPass(false);
     S.avatarSel = r.avatar;
     buildAvatarGrid();
   });

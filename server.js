@@ -7,7 +7,11 @@
  * Variables de entorno:
  *   PORT              puerto (lo define el hosting)
  *   ADMIN_PASSWORD    contraseña de los expositores
+ *   ADMIN_NAMES       nombres de los expositores separados por coma (ej: "Juan Pérez, María Gómez").
+ *                     Hay un solo ingreso para todos: si alguien escribe uno de estos nombres,
+ *                     se le pide la contraseña y entra como expositor.
  *   EVENT_TITLE       título inicial de la sala
+ *   KEEPALIVE_URL     URL pública para auto-ping (en Render se usa RENDER_EXTERNAL_URL solo)
  */
 
 const http = require('http');
@@ -19,6 +23,8 @@ const { Server } = require('socket.io');
 const PORT = process.env.PORT || 3000;
 const DEFAULT_PASSWORD = '(definida en .env)';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || DEFAULT_PASSWORD;
+const DEFAULT_ADMIN_NAMES = 'Juan Pérez';
+const ADMIN_NAMES_RAW = process.env.ADMIN_NAMES || DEFAULT_ADMIN_NAMES;
 const AVATAR_COUNT = 16;
 const MAX_MESSAGES = 500;
 const STICKERS = require('./public/stickers.json');
@@ -87,6 +93,14 @@ function cleanText(s, max = 500) {
 }
 const normName = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const RESERVED = /(expositor|admin|moderador|sistema|host)/;
+
+/** nombre normalizado -> nombre tal como se escribió en ADMIN_NAMES */
+const ADMIN_NAMES = new Map();
+for (const raw of ADMIN_NAMES_RAW.split(',')) {
+  const n = cleanName(raw);
+  if (n.length >= 2) ADMIN_NAMES.set(normName(n), n);
+}
+const adminNameOf = (name) => ADMIN_NAMES.get(normName(name)) || null;
 
 function allow(u, key, max, windowMs) {
   const now = Date.now();
@@ -222,7 +236,24 @@ function setStatus(u, status, reason) {
 const ipOf = (socket) =>
   String(socket.handshake.headers['x-forwarded-for'] || '').split(',')[0].trim() || socket.handshake.address;
 
+/* 5 contraseñas erróneas desde la misma IP ⇒ bloqueo de 1 minuto */
 const loginFails = new Map();
+function passwordFails(socket) {
+  const f = loginFails.get(ipOf(socket));
+  if (f && f.until > Date.now()) return { ok: false, code: 'locked', retry: Math.ceil((f.until - Date.now()) / 1000) };
+  return null;
+}
+function registerFail(socket) {
+  const ip = ipOf(socket);
+  const f = loginFails.get(ip) || { count: 0, until: 0 };
+  f.count++;
+  if (f.count >= 5) {
+    f.count = 0;
+    f.until = Date.now() + 60e3;
+  }
+  loginFails.set(ip, f);
+  return { ok: false, code: 'bad_password' };
+}
 
 /* ------------------------------------------------------------- Sockets */
 
@@ -250,6 +281,19 @@ io.on('connection', (socket) => {
       data = data || {};
       const clientId = String(data.clientId || '');
       if (!/^[A-Za-z0-9-]{16,64}$/.test(clientId)) return cb({ ok: false, code: 'bad_client' });
+
+      // ¿Es un expositor? Un solo ingreso para todos: el rol se detecta por el nombre registrado.
+      const adminName = adminNameOf(cleanName(data.name));
+      if (adminName) {
+        if (!data.password) return cb({ ok: false, code: 'need_password' });
+        const fail = passwordFails(socket);
+        if (fail) return cb(fail);
+        if (!checkPassword(String(data.password))) return cb(registerFail(socket));
+        loginFails.delete(ipOf(socket));
+        const token = crypto.randomBytes(24).toString('hex');
+        adminTokens.set(token, { name: adminName, hostId: token.slice(0, 6), at: Date.now() });
+        return cb({ ok: true, role: 'admin', token, name: adminName });
+      }
 
       let u = users.get(clientId);
       if (u && u.status === 'banned') {
@@ -363,36 +407,22 @@ io.on('connection', (socket) => {
     socket.emit('chat:history', messages.slice(-200));
   }
 
-  socket.on('admin:login', (data, cb) => {
-    cb = typeof cb === 'function' ? cb : () => {};
-    data = data || {};
-    const ip = ipOf(socket);
-    const f = loginFails.get(ip) || { count: 0, until: 0 };
-    if (f.until > Date.now()) return cb({ ok: false, code: 'locked', retry: Math.ceil((f.until - Date.now()) / 1000) });
-
-    if (!checkPassword(String(data.password || ''))) {
-      f.count++;
-      if (f.count >= 5) {
-        f.count = 0;
-        f.until = Date.now() + 60e3;
-      }
-      loginFails.set(ip, f);
-      return cb({ ok: false, code: 'bad_password' });
-    }
-    loginFails.delete(ip);
-    const name = cleanName(data.name) || 'Expositor';
-    const token = crypto.randomBytes(24).toString('hex');
-    const info = { name, hostId: token.slice(0, 6), at: Date.now() };
-    adminTokens.set(token, info);
-    becomeAdmin(token, info, cb);
-  });
-
+  // El ingreso de expositores se hace por 'join' (ver arriba); el panel /admin entra con el token.
   socket.on('admin:resume', (data, cb) => {
     cb = typeof cb === 'function' ? cb : () => {};
     const token = String((data && data.token) || '');
     const info = adminTokens.get(token);
     if (!info) return cb({ ok: false });
     becomeAdmin(token, info, cb);
+  });
+
+  socket.on('admin:logout', (data) => {
+    const token = String((data && data.token) || '');
+    if (token && adminTokens.has(token)) adminTokens.delete(token);
+    if (socket.data.role === 'admin') {
+      socket.data.role = null;
+      socket.leave('admins');
+    }
   });
 
   const onAdmin = (ev, fn) =>
@@ -522,13 +552,33 @@ setInterval(() => {
   if (changed) scheduleBroadcast();
 }, 5000).unref();
 
+/* ---------------------------------------------------------- Keep-alive
+ * El plan gratis de Render apaga el servicio tras ~15 min sin tráfico entrante.
+ * Cada 10 minutos el servidor se pide a sí mismo /health por su URL pública: ese pedido
+ * entra por el balanceador de Render y cuenta como visita, así nunca llega a dormirse.
+ * Render define RENDER_EXTERNAL_URL solo; en otro hosting se puede usar KEEPALIVE_URL.
+ */
+const KEEPALIVE_URL = (process.env.KEEPALIVE_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/+$/, '');
+if (KEEPALIVE_URL && typeof fetch === 'function') {
+  setInterval(() => {
+    fetch(KEEPALIVE_URL + '/health', { signal: AbortSignal.timeout(20e3) })
+      .then((r) => { if (!r.ok) console.warn('keep-alive: respuesta', r.status); })
+      .catch((e) => console.warn('keep-alive falló:', e.message));
+  }, 10 * 60e3).unref();
+}
+
 server.listen(PORT, () => {
   console.log(`\n  🎧  Modo Motivados corriendo en el puerto ${PORT}`);
-  console.log(`      Oyentes:     http://localhost:${PORT}/`);
-  console.log(`      Expositores: http://localhost:${PORT}/admin`);
+  console.log(`      Ingreso (oyentes y expositores): http://localhost:${PORT}/`);
+  console.log(`      Expositores registrados: ${[...ADMIN_NAMES.values()].join(', ')}`);
+  if (KEEPALIVE_URL) console.log(`      Keep-alive activo: ${KEEPALIVE_URL}/health cada 10 min`);
   if (ADMIN_PASSWORD === DEFAULT_PASSWORD) {
-    console.log('\n  ⚠️  Estás usando la contraseña por defecto. Definí ADMIN_PASSWORD antes de publicar.\n');
+    console.log('\n  ⚠️  Estás usando la contraseña por defecto. Definí ADMIN_PASSWORD antes de publicar.');
   }
+  if (!process.env.ADMIN_NAMES) {
+    console.log(`  ⚠️  ADMIN_NAMES no está definida: se usa el ejemplo "${DEFAULT_ADMIN_NAMES}".`);
+  }
+  console.log('');
 });
 
 module.exports = { server, io };
