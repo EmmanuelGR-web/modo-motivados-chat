@@ -41,6 +41,11 @@ app.disable('x-powered-by');
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'same-origin');
+  // HTTPS obligatorio (solo cuando ya se entra por HTTPS, así no afecta a localhost)
+  if (req.secure) res.setHeader('Strict-Transport-Security', 'max-age=15552000');
+  // la app no usa cámara, micrófono ni ubicación: se bloquean
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   res.setHeader(
     'Content-Security-Policy',
     "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
@@ -80,7 +85,20 @@ app.get('/qr.png', async (req, res, next) => {
 });
 
 const server = http.createServer(app);
-const io = new Server(server, { maxHttpBufferSize: 1e5 });
+const io = new Server(server, {
+  maxHttpBufferSize: 1e5,
+  // Solo se aceptan conexiones desde esta misma página: otro sitio no puede conectarse
+  // usando el navegador de un oyente. (Clientes sin "Origin", como las pruebas, se permiten.)
+  allowRequest: (req, cb) => {
+    const origin = req.headers.origin;
+    if (!origin) return cb(null, true);
+    try {
+      cb(null, new URL(origin).host === req.headers.host);
+    } catch (e) {
+      cb(null, false);
+    }
+  },
+});
 
 /* --------------------------------------------------------------- Estado */
 
@@ -531,6 +549,9 @@ io.on('connection', (socket) => {
     room.status = 'ended';
     room.endedAt = Date.now();
     pushMessage({ system: true, text: '⏹️ La transmisión finalizó. ¡Gracias por participar!' });
+    // No se guarda nada: al cortar, el chat se borra de la memoria del servidor
+    // (cada pantalla conserva lo que ya mostró hasta que se recarga).
+    messages = [];
     scheduleBroadcast();
   });
   onAdmin('room:settings', (d) => {

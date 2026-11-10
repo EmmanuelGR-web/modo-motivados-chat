@@ -22,7 +22,7 @@
     chatTab: 'room', // 'room' = chat de la sala; si no, uid del oyente de la conversación privada
     dms: new Map(), // uid -> { peer, msgs, unread, open }
   };
-  try { A.token = localStorage.getItem('mm_admin_token'); } catch (e) { /* ignore */ }
+  try { localStorage.removeItem('mm_admin_token'); A.token = sessionStorage.getItem('mm_admin_token'); } catch (e) { /* ignore */ }
 
   const msgsEl = $('#msgs');
   const input = $('#input');
@@ -34,7 +34,7 @@
    */
 
   function clearSession() {
-    try { localStorage.removeItem('mm_admin_token'); } catch (e) { /* ignore */ }
+    try { sessionStorage.removeItem('mm_admin_token'); } catch (e) { /* ignore */ }
     A.token = null;
     A.ready = false;
   }

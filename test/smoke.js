@@ -38,6 +38,7 @@ const test = async (name, fn) => { await fn(); console.log('  ✔', name); };
   const ana = await client();
   const beto = await client();
   const cami = await client();
+  let adminToken = null;
 
   await test('ingreso único: un nombre de expositor pide contraseña; incorrecta falla, correcta da rol admin', async () => {
     // sin contraseña: el servidor pide la clave (no entra como oyente)
@@ -46,6 +47,7 @@ const test = async (name, fn) => { await fn(); console.log('  ✔', name); };
     assert.strictEqual((await adminJoin(admin, 'juan perez')).code, 'need_password');
     assert.strictEqual((await adminJoin(admin, 'Juan Pérez', 'mala')).code, 'bad_password');
     const r = await adminJoin(admin, 'juan perez', 'test-pass');
+    adminToken = r.token;
     assert.ok(r.ok && r.role === 'admin' && r.token);
     assert.strictEqual(r.name, 'Juan Pérez'); // se muestra como está registrado
     // el panel (/admin) toma el rol de expositor reanudando con ese token
@@ -237,6 +239,14 @@ const test = async (name, fn) => { await fn(); console.log('  ✔', name); };
     ana.emit('chat:send', { text: 'tarde' });
     await sleep(150);
     assert.strictEqual(ana.log.err.at(-1).code, 'ended');
+    // no se guarda nada: al cortar, el servidor ya no tiene el chat en memoria
+    const peek = await client();
+    let hist = null;
+    peek.on('chat:history', (l) => (hist = l));
+    await emitAck(peek, 'admin:resume', { token: adminToken });
+    await sleep(200);
+    assert.deepStrictEqual(hist, []);
+    peek.close();
     admin.emit('room:start');
     await sleep(250);
     assert.strictEqual(ana.log.room.status, 'live');
@@ -299,6 +309,22 @@ const test = async (name, fn) => { await fn(); console.log('  ✔', name); };
     beto.emit('dm:send', { to: cami.you.uid, text: 'x', from: 'host' });
     await sleep(150);
     assert.ok(cami.log.dm.slice(before).every((m) => m.from === beto.you.uid));
+  });
+
+  await test('seguridad: otro sitio no puede conectarse; cabeceras de seguridad presentes', async () => {
+    // conexión desde un origen ajeno (como haría una página maliciosa) → rechazada
+    const evil = io(URL, { transports: ['polling'], forceNew: true, reconnection: false, extraHeaders: { Origin: 'https://sitio-malicioso.example' } });
+    const res = await new Promise((r) => { evil.on('connect', () => r('conectó')); evil.on('connect_error', () => r('rechazada')); setTimeout(() => r('timeout'), 3000); });
+    evil.close();
+    assert.strictEqual(res, 'rechazada');
+    // desde la propia página → aceptada
+    const same = io(URL, { transports: ['polling'], forceNew: true, reconnection: false, extraHeaders: { Origin: URL } });
+    const ok = await new Promise((r) => { same.on('connect', () => r('conectó')); same.on('connect_error', () => r('rechazada')); setTimeout(() => r('timeout'), 3000); });
+    same.close();
+    assert.strictEqual(ok, 'conectó');
+    const h = (await fetch(URL + '/')).headers;
+    assert.match(h.get('permissions-policy'), /camera=\(\)/);
+    assert.match(h.get('content-security-policy'), /script-src 'self'/);
   });
 
   await test('QR del link: /qr.svg y /qr.png responden con imagen', async () => {

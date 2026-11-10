@@ -162,7 +162,7 @@
       // Expositor: guardamos la sesión y pasamos al panel
       if (res && res.ok && res.role === 'admin') {
         try {
-          localStorage.setItem('mm_admin_token', res.token);
+          sessionStorage.setItem('mm_admin_token', res.token); // se borra al cerrar la pestaña
           localStorage.setItem('mm_admin_name', res.name);
           localStorage.removeItem('mm_profile');
         } catch (e) { /* ignore */ }

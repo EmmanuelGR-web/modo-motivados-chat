@@ -72,7 +72,9 @@ En el chat podés **borrar** cualquier mensaje con 🗑. Los privados que te man
 
 ## ❓ Preguntas frecuentes
 
-**¿Se guardan los mensajes?** No. El chat vive mientras el servidor está prendido; los mensajes privados ni siquiera se guardan en el servidor, solo se entregan.
+**¿Se guardan los mensajes?** No. No hay base de datos: el chat de la sala existe solo mientras dura la transmisión y **se borra al tocar Cortar**. Los mensajes privados ni siquiera pasan por una memoria: el servidor los entrega y los descarta.
+
+**¿Es seguro?** Todo viaja cifrado (https), lo que escribe la gente siempre se muestra como texto (no se puede inyectar código), la sesión del expositor se cierra al cerrar la pestaña y solo esta página puede conectarse al chat.
 
 **Alguien baneado, ¿puede volver?** El ban queda asociado a su navegador. Si borra los datos del navegador podría intentar entrar con otro nombre; con *Pedir aprobación* activado lo vas a ver en *Solicitudes*.
 
