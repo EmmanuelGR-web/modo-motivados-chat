@@ -130,6 +130,12 @@ for (const raw of ADMIN_NAMES_RAW.split(',')) {
 }
 const adminNameOf = (name) => ADMIN_NAMES.get(normName(name)) || null;
 
+/* Mensajes privados con los expositores: los oyentes le escriben a un destinatario fijo "host"
+ * (el equipo de expositores) y lo reciben todas las sesiones de expositor conectadas. */
+const HOST_UID = 'host';
+const HOST_LABEL = ADMIN_NAMES.size === 1 ? [...ADMIN_NAMES.values()][0] : 'Expositores';
+const hostsOnline = () => (io.sockets.adapter.rooms.get('admins') || { size: 0 }).size;
+
 function allow(u, key, max, windowMs) {
   const now = Date.now();
   u.rl = u.rl || {};
@@ -198,6 +204,8 @@ function roomState() {
     startedAt: room.startedAt,
     endedAt: room.endedAt,
     online,
+    hostsOnline: hostsOnline(),
+    hostLabel: HOST_LABEL,
     now: Date.now(),
   };
 }
@@ -392,12 +400,42 @@ io.on('connection', (socket) => {
   });
 
   socket.on('dm:send', (data) => {
-    const u = me();
     data = data || {};
+    const to = String(data.to || '');
+
+    // Expositor → oyente (respuesta o mensaje nuevo). Lo ven el oyente y todas las sesiones de expositor.
+    if (socket.data.role === 'admin') {
+      const content = buildContent(data);
+      const target = byUid.get(to);
+      if (!content || !target) return;
+      if (target.status !== 'active' || !isOnline(target)) return socket.emit('dm:failed', { to, reason: 'offline' });
+      const m = { id: ++msgSeq, ts: Date.now(), from: HOST_UID, to: target.uid, peer: pub(target), hostName: socket.data.adminName, ...content };
+      emitToUser(target, 'dm:message', m);
+      io.to('admins').emit('dm:message', m);
+      return;
+    }
+
+    const u = me();
     if (!u || u.status !== 'active') return;
     const content = buildContent(data);
-    const target = byUid.get(String(data.to || ''));
-    if (!content || !target || target === u) return;
+    if (!content) return;
+
+    // Oyente → expositores
+    if (to === HOST_UID) {
+      const fail = (reason) => socket.emit('dm:failed', { to, reason });
+      if (room.status !== 'live') return fail(room.status);
+      if (isSuspended(u)) return fail('suspended');
+      if (!allow(u, 'dm', 8, 5000)) return fail('rate');
+      if (!hostsOnline()) return fail('offline');
+      const m = { id: ++msgSeq, ts: Date.now(), from: u.uid, to: HOST_UID, peer: pub(u), ...content };
+      emitToUser(u, 'dm:message', m);
+      io.to('admins').emit('dm:message', m);
+      return;
+    }
+
+    // Oyente → oyente (los expositores no los ven)
+    const target = byUid.get(to);
+    if (!target || target === u) return;
     const fail = (reason) => socket.emit('dm:failed', { to: target.uid, reason });
 
     if (room.status !== 'live') return fail(room.status);
@@ -429,6 +467,7 @@ io.on('connection', (socket) => {
     socket.data.adminName = info.name;
     socket.data.hostId = info.hostId;
     socket.join('admins');
+    scheduleBroadcast(); // los oyentes ven que hay un expositor disponible para privados
     cb({ ok: true, token, name: info.name });
     socket.emit('room:state', roomState());
     socket.emit('admin:snapshot', adminSnapshot());
@@ -450,6 +489,7 @@ io.on('connection', (socket) => {
     if (socket.data.role === 'admin') {
       socket.data.role = null;
       socket.leave('admins');
+      scheduleBroadcast();
     }
   });
 
@@ -556,6 +596,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
+    if (socket.data.role === 'admin') scheduleBroadcast();
     const u = me();
     if (u) {
       u.socketIds.delete(socket.id);

@@ -205,6 +205,9 @@ input { font-family: inherit; color: var(--text); }
 .sticker.sm { width: 76px; height: 76px; border-width: 3px; border-radius: 18px; transform: none; }
 .sticker.sm .st-emoji { font-size: 32px; }
 .sticker.sm .st-text { font-size: 10px; -webkit-text-stroke: 2px #1a0a3a; }
+/* stickers ilustrados (WebP con fondo transparente) */
+.sticker-img { display: block; width: 150px; height: 150px; object-fit: contain; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.35)); user-select: none; -webkit-user-drag: none; }
+.sticker-img.sm { width: 80px; height: 80px; filter: none; }
 
 /* ---------- Pantallas de ingreso / estados ---------- */
 .screen {
@@ -415,6 +418,11 @@ label.lbl { display: block; font-size: 12px; font-weight: 600; letter-spacing: 0
 .emoji-cats { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 4px; flex: none; scrollbar-width: none; }
 .ecat { background: none; border: 0; font-size: 20px; padding: 4px 8px; border-radius: 10px; opacity: 0.6; }
 .ecat.on { opacity: 1; background: var(--surface-2); }
+.ecat.pack { font-size: 13px; font-weight: 600; white-space: nowrap; padding: 6px 12px; }
+
+/* Expositor fijo arriba en la lista de personas (para mandarle privados) */
+.user-row.host-row { background: linear-gradient(90deg, rgba(255, 211, 77, 0.16), transparent); box-shadow: inset 3px 0 0 var(--gold); margin-bottom: 4px; }
+.user-row.host-row .host-tag { margin-left: 0; }
 .emoji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); gap: 2px; }
 .emoji-btn { background: none; border: 0; font-size: 26px; padding: 4px 0; border-radius: 10px; line-height: 1.2; font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif; }
 .emoji-btn:hover { background: var(--surface-2); transform: scale(1.15); }
@@ -548,6 +556,8 @@ input::placeholder { color: var(--muted); opacity: 0.85; }
 :root[data-theme='light'] .avatar { box-shadow: 0 2px 8px rgba(40, 20, 100, 0.3); }
 :root[data-theme='light'] .msg.own .bubble { box-shadow: 0 3px 12px rgba(230, 32, 196, 0.25); }
 :root[data-theme='light'] .bubble { box-shadow: 0 1px 4px rgba(40, 20, 100, 0.08); }
+:root[data-theme='light'] .bubble.only-sticker,
+:root[data-theme='light'] .msg.own .bubble.only-sticker { box-shadow: none; background: none; }
 :root[data-theme='light'] .tab.on { box-shadow: inset 0 2px 0 var(--cyan-t); }
 :root[data-theme='light'] .emoji-btn:hover { transform: none; background: var(--surface-2); }
 

@@ -64,6 +64,8 @@
       </section>
 
       <section class="panel" id="panel-chat">
+        <nav id="a-tabs" class="tabs hidden" aria-label="Conversaciones"></nav>
+        <div id="a-banner" class="banner info hidden"></div>
         <div class="msgs" id="msgs" aria-live="polite"></div>
         <div id="picker-slot"></div>
         <form id="composer" class="composer" autocomplete="off">
@@ -75,7 +77,7 @@
     </div>
 
     <nav class="bottom-nav" id="bottom-nav">
-      <button data-p="panel-chat" class="on" type="button">💬 Chat</button>
+      <button data-p="panel-chat" class="on" type="button">💬 Chat <span class="badge hidden" id="nav-chat-badge" style="top:4px;right:18%">0</span></button>
       <button data-p="panel-users" type="button">👥 Oyentes <span class="badge hidden" id="nav-badge" style="top:4px;right:18%">0</span></button>
     </nav>
   </div>

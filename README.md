@@ -12,13 +12,16 @@ Chat en tiempo real para la presentación tipo streaming del grupo: los **oyente
 - Por oyente: **suspender** (1, 5, 10, 30 min o hasta restablecer), **expulsar**, **banear** y **restablecer**.
 - Lista de solicitudes, de oyentes en sala y de baneados.
 - Escribir como expositor (con insignia 👑), borrar mensajes sueltos o **limpiar todo el chat general**.
+- **Mensajes privados con los oyentes:** cada oyente que te escribe aparece en una pestaña del chat; también podés escribirle desde sus acciones.
 - **📤 Compartir:** código QR del link (para proyectarlo o mandarlo como imagen), enviar por WhatsApp y copiar link.
 - Interruptor de **sonido del chat** (mensajes y avisos de solicitudes).
 
 **Oyentes**
 - Nombre + avatar estilo Kahoot (o nombre y avatar al azar con 🎲).
 - Chat de sala, emojis, stickers y sonido de notificación estilo Messenger.
-- **Mensajes privados** en pestañas dentro del mismo chat. Solo los ven los dos participantes (los expositores no los reciben).
+- **Mensajes privados** en pestañas dentro del mismo chat. Entre oyentes solo los ven los dos participantes (los expositores no los reciben).
+- **Escribirle al expositor por privado:** aparece primero (👑) en la lista de personas.
+- **Stickers propios del grupo** en tres paquetes: Modo Motivados, El grupo y Clásicos.
 - **Modo claro y oscuro** con botón ☀️/🌙: arranca según el sistema del usuario y recuerda su elección.
 - **Silenciar** los mensajes de alguien en la sala, **bloquear** (no recibir ni enviar privados) y apagar el sonido.
 
@@ -93,7 +96,8 @@ public/admin.html    panel de expositores (con sesión)  public/admin.js
 public/shared.js     avatares, emojis, stickers, sonidos, componentes
 public/style.css     tema neón (colores del logo), con variables para modo claro/oscuro
 public/theme.js      aplica el tema guardado antes de pintar (evita parpadeos)
-public/stickers.json packs de stickers (editable)
+public/stickers.json lista de stickers por paquete (editable)
+public/stickers/     imágenes WebP de los stickers ilustrados
 test/smoke.js        pruebas automáticas del servidor (npm test)
 ```
 

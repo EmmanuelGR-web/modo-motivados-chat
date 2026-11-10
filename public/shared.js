@@ -218,8 +218,27 @@
     })
     .catch(() => {});
 
+  // Paquetes del selector (el orden de las pestañas)
+  MM.STICKER_PACKS = [
+    { id: 'mm', label: '👑 Modo Motivados' },
+    { id: 'grupo', label: '🎧 El grupo' },
+    { id: 'clasicos', label: '✨ Clásicos' },
+  ];
+
   MM.stickerEl = function (id, small) {
     const s = MM.stickerMap[id] || { emoji: '❔', text: '', c1: '#444', c2: '#222' };
+    if (s.img) {
+      // sticker ilustrado (imagen con fondo transparente)
+      return h('img', {
+        class: 'sticker-img' + (small ? ' sm' : ''),
+        src: s.img,
+        alt: s.text,
+        title: s.text,
+        loading: 'lazy',
+        decoding: 'async',
+        draggable: 'false',
+      });
+    }
     return h(
       'span',
       { class: 'sticker' + (small ? ' sm' : ''), style: { background: `linear-gradient(145deg, ${s.c1}, ${s.c2})` } },
@@ -252,6 +271,7 @@
 
     let mode = 'emoji';
     let cat = '😀';
+    let pack = MM.STICKER_PACKS[0].id;
 
     const bEmoji = h('button', { type: 'button', class: 'ptab on', text: '😀 Emojis' });
     const bSticker = h('button', { type: 'button', class: 'ptab', text: '🏷️ Stickers' });
@@ -262,8 +282,25 @@
       bEmoji.classList.toggle('on', mode === 'emoji');
       bSticker.classList.toggle('on', mode === 'sticker');
       if (mode === 'sticker') {
+        const packs = MM.STICKER_PACKS.filter((p) => MM.stickers.some((s) => (s.pack || 'clasicos') === p.id));
+        if (!packs.some((p) => p.id === pack) && packs.length) pack = packs[0].id;
+        const ptabs = h('div', { class: 'emoji-cats sticker-packs' });
+        packs.forEach((p) =>
+          ptabs.append(
+            h('button', {
+              type: 'button',
+              class: 'ecat pack' + (p.id === pack ? ' on' : ''),
+              text: p.label,
+              onclick: () => {
+                pack = p.id;
+                render();
+              },
+            })
+          )
+        );
+        body.append(ptabs);
         const grid = h('div', { class: 'sticker-grid' });
-        MM.stickers.forEach((s) =>
+        MM.stickers.filter((s) => (s.pack || 'clasicos') === pack).forEach((s) =>
           grid.append(
             h(
               'button',

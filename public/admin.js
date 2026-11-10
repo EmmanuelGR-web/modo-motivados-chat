@@ -19,6 +19,8 @@
     search: '',
     pendingCount: 0,
     ready: false,
+    chatTab: 'room', // 'room' = chat de la sala; si no, uid del oyente de la conversación privada
+    dms: new Map(), // uid -> { peer, msgs, unread, open }
   };
   try { A.token = localStorage.getItem('mm_admin_token'); } catch (e) { /* ignore */ }
 
@@ -233,6 +235,7 @@
     if (!u) return MM.toast('Esa persona ya no está en la lista.');
     const items = [];
     if (u.status === 'active') {
+      if (u.online) items.push({ icon: '💬', label: 'Enviar mensaje privado', onClick: () => openDM(uid) });
       items.push({ sep: 'Suspender temporalmente (no puede escribir)' });
       [[1, '1 minuto'], [5, '5 minutos'], [10, '10 minutos'], [30, '30 minutos'], [0, 'Hasta que lo restablezca']].forEach(([min, label]) =>
         items.push({ icon: '🔇', label, onClick: () => { A.socket.emit('mod:suspend', { uid, minutes: min }); MM.toast('🔇 ' + u.name + ' suspendido'); } })
@@ -366,9 +369,115 @@
 
   function renderMsgs() {
     msgsEl.replaceChildren();
-    if (!A.messages.length) msgsEl.append(h('div', { class: 'empty', text: 'Acá vas a ver el chat en vivo. Los mensajes de los oyentes aparecen al instante.' }));
-    A.messages.forEach((m) => msgsEl.append(build(m)));
+    if (A.chatTab === 'room') {
+      if (!A.messages.length) msgsEl.append(h('div', { class: 'empty', text: 'Acá vas a ver el chat en vivo. Los mensajes de los oyentes aparecen al instante.' }));
+      A.messages.forEach((m) => msgsEl.append(build(m)));
+    } else {
+      const c = A.dms.get(A.chatTab);
+      if (!c.msgs.length) msgsEl.append(h('div', { class: 'empty', text: 'Conversación privada con ' + c.peer.name + '. No aparece en la sala 🔒' }));
+      c.msgs.forEach((m) => msgsEl.append(buildDM(m)));
+    }
     scrollBottom();
+  }
+
+  /* ---------------------------------------------- Mensajes privados (oyente ↔ expositor) */
+
+  function buildDM(m) {
+    const own = m.from === 'host';
+    const kids = [];
+    if (own && m.hostName && m.hostName !== A.name) kids.push(h('div', { class: 'b-name nc-host', text: m.hostName }));
+    if (m.sticker) kids.push(MM.stickerEl(m.sticker));
+    else kids.push(h('div', { class: 'b-text', text: m.text }));
+    kids.push(h('div', { class: 'b-time', text: MM.fmtTime(m.ts) }));
+    return h('div', { class: 'msg' + (own ? ' own' : ''), 'data-id': 'dm' + m.id },
+      h('div', { class: 'bubble' + (m.sticker ? ' only-sticker' : '') }, kids));
+  }
+
+  function peerInfo(uid, fallback) {
+    const u = byUid().get(uid);
+    return u ? { uid, name: u.name, avatar: u.avatar } : fallback || { uid, name: 'Oyente', avatar: 0 };
+  }
+  const peerOnline = (uid) => { const u = byUid().get(uid); return !!(u && u.status === 'active' && u.online); };
+
+  function ensureDM(uid, peer) {
+    let c = A.dms.get(uid);
+    if (!c) {
+      c = { peer: peerInfo(uid, peer), msgs: [], unread: 0, open: true };
+      A.dms.set(uid, c);
+    }
+    c.open = true;
+    return c;
+  }
+
+  function openDM(uid) {
+    ensureDM(uid);
+    setTab(uid);
+    showMobilePanel('panel-chat');
+    input.focus();
+  }
+
+  function setTab(t) {
+    A.chatTab = t;
+    if (t !== 'room') A.dms.get(t).unread = 0;
+    picker.close();
+    $('#btn-emoji').textContent = '😊';
+    renderTabs();
+    renderMsgs();
+  }
+
+  function unreadDMs() {
+    let n = 0;
+    for (const c of A.dms.values()) n += c.unread;
+    return n;
+  }
+
+  function renderTabs() {
+    const nav = $('#a-tabs');
+    const openDMs = [...A.dms].filter(([, c]) => c.open);
+    nav.classList.toggle('hidden', !openDMs.length);
+    nav.replaceChildren(
+      h('button', { type: 'button', class: 'tab' + (A.chatTab === 'room' ? ' on' : ''), onclick: () => setTab('room') },
+        h('span', { text: '🌐' }), h('span', { class: 't-name', text: 'Sala' }))
+    );
+    for (const [uid, c] of openDMs) {
+      c.peer = peerInfo(uid, c.peer);
+      nav.append(
+        h('button', { type: 'button', class: 'tab' + (A.chatTab === uid ? ' on' : ''), onclick: () => setTab(uid) },
+          MM.avatar(c.peer.avatar, 22),
+          h('span', { class: 't-name', text: c.peer.name }),
+          c.unread ? h('span', { class: 't-unread', text: c.unread }) : null,
+          h('span', {
+            class: 't-x', role: 'button', 'aria-label': 'Cerrar conversación', text: '✕',
+            onclick: (e) => { e.stopPropagation(); c.open = false; if (A.chatTab === uid) setTab('room'); else renderTabs(); },
+          })
+        )
+      );
+    }
+    // aviso y placeholder según la pestaña
+    const banner = $('#a-banner');
+    if (A.chatTab === 'room') {
+      banner.classList.add('hidden');
+      input.placeholder = 'Escribir como expositor…';
+    } else {
+      const c = A.dms.get(A.chatTab);
+      banner.classList.remove('hidden');
+      banner.textContent = peerOnline(A.chatTab)
+        ? '🔒 Privado con ' + c.peer.name + ': no aparece en la sala.'
+        : '⚪ ' + c.peer.name + ' no está conectado ahora.';
+      input.placeholder = 'Mensaje privado a ' + c.peer.name + '…';
+    }
+    const badge = $('#nav-chat-badge');
+    if (badge) {
+      const n = unreadDMs();
+      badge.textContent = n;
+      badge.classList.toggle('hidden', !n);
+    }
+  }
+
+  function sendContent(content) {
+    if (A.chatTab !== 'room') return A.socket.emit('dm:send', { to: A.chatTab, ...content });
+    if (A.room.status !== 'live' && A.room.status !== 'paused') return MM.toast('Iniciá la transmisión para poder escribir.');
+    A.socket.emit('chat:send', content);
   }
 
   $('#composer').addEventListener('submit', (e) => {
@@ -376,8 +485,7 @@
     MM.sound.unlock();
     const text = input.value.replace(/\s+/g, ' ').trim();
     if (!text) return;
-    if (A.room.status !== 'live' && A.room.status !== 'paused') return MM.toast('Iniciá la transmisión para poder escribir.');
-    A.socket.emit('chat:send', { text });
+    sendContent({ text });
     input.value = '';
     input.focus();
   });
@@ -389,10 +497,7 @@
       input.setRangeText(em, s, e, 'end');
       input.focus();
     },
-    onSticker: (id) => {
-      if (A.room.status !== 'live' && A.room.status !== 'paused') return MM.toast('Iniciá la transmisión para poder escribir.');
-      A.socket.emit('chat:send', { sticker: id });
-    },
+    onSticker: (id) => sendContent({ sticker: id }),
   });
   $('#picker-slot').append(picker);
   $('#btn-emoji').addEventListener('click', () => {
@@ -421,15 +526,20 @@
     }
     renderTop();
     renderLists();
+    if (A.dms.size) renderTabs();
   });
 
   A.socket.on('chat:history', (list) => {
     A.messages = list;
-    renderMsgs();
+    if (A.chatTab === 'room') renderMsgs();
   });
   A.socket.on('chat:message', (m) => {
     A.messages.push(m);
     if (A.messages.length > 400) A.messages.shift();
+    if (A.chatTab !== 'room') {
+      if (!m.system && !(m.from && m.from.host)) MM.sound.play('msg');
+      return;
+    }
     const empty = msgsEl.querySelector('.empty');
     if (empty) empty.remove();
     const stick = nearBottom() || (m.from && m.from.uid === A.hostUid);
@@ -442,6 +552,29 @@
     const el = msgsEl.querySelector('[data-id="' + id + '"]');
     if (el) el.remove();
   });
+  A.socket.on('dm:message', (m) => {
+    const fromHost = m.from === 'host';
+    const uid = fromHost ? m.to : m.from;
+    const c = ensureDM(uid, m.peer);
+    c.msgs.push(m);
+    if (c.msgs.length > 300) c.msgs.shift();
+    const viewing = A.chatTab === uid;
+    if (viewing) {
+      const empty = msgsEl.querySelector('.empty');
+      if (empty) empty.remove();
+      msgsEl.append(buildDM(m));
+      scrollBottom();
+    }
+    if (!fromHost) {
+      if (!viewing) {
+        c.unread++;
+        MM.toast('💬 ' + c.peer.name + ' te escribió por privado', 3000, 'dm-' + uid);
+      }
+      MM.sound.play('dm');
+    }
+    renderTabs();
+  });
+  A.socket.on('dm:failed', () => MM.toast('Esa persona ya no está en la sala.', 3000));
   A.socket.on('chat:error', ({ code }) => MM.toast(code === 'closed' ? 'Iniciá la transmisión para poder escribir.' : 'No se pudo enviar.'));
 
   document.addEventListener('pointerdown', () => MM.sound.unlock(), { once: true });

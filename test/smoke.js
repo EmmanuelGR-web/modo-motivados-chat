@@ -267,6 +267,40 @@ const test = async (name, fn) => { await fn(); console.log('  ✔', name); };
     late.close();
   });
 
+  await test('privados con el expositor: oyente → expositor y respuesta; los demás no los ven', async () => {
+    // los oyentes saben que hay un expositor conectado para escribirle
+    assert.ok(ana.log.room.hostsOnline >= 1);
+    assert.strictEqual(ana.log.room.hostLabel, 'Expositores'); // hay 2 nombres registrados
+    const adminDm = admin.log.dm.length, betoDm = beto.log.dm.length;
+    ana.emit('dm:send', { to: 'host', text: 'consulta para el expositor' });
+    await sleep(200);
+    const got = admin.log.dm.at(-1);
+    assert.strictEqual(admin.log.dm.length, adminDm + 1);
+    assert.ok(got.text === 'consulta para el expositor' && got.to === 'host' && got.peer.name === 'Ana');
+    assert.strictEqual(ana.log.dm.at(-1).text, 'consulta para el expositor'); // le llega su propia copia
+    // el expositor responde por privado
+    admin.emit('dm:send', { to: ana.you.uid, text: 'respuesta privada' });
+    await sleep(200);
+    const rep = ana.log.dm.at(-1);
+    assert.ok(rep.text === 'respuesta privada' && rep.from === 'host' && rep.to === ana.you.uid);
+    assert.strictEqual(beto.log.dm.length, betoDm); // Beto no ve nada de esto
+    // stickers ilustrados nuevos (paquetes Modo Motivados y El grupo)
+    ana.emit('dm:send', { to: 'host', sticker: 'gr02' });
+    ana.emit('chat:send', { sticker: 'mm01' });
+    await sleep(200);
+    assert.strictEqual(admin.log.dm.at(-1).sticker, 'gr02');
+    assert.strictEqual(beto.log.chat.at(-1).sticker, 'mm01');
+    // los privados entre oyentes siguen sin llegarle al expositor
+    beto.emit('dm:send', { to: cami.you.uid, text: 'solo entre oyentes' });
+    await sleep(200);
+    assert.ok(!admin.log.dm.some((m) => m.text === 'solo entre oyentes'));
+    // un oyente no puede hacerse pasar por expositor mandando como 'host'
+    const before = cami.log.dm.length;
+    beto.emit('dm:send', { to: cami.you.uid, text: 'x', from: 'host' });
+    await sleep(150);
+    assert.ok(cami.log.dm.slice(before).every((m) => m.from === beto.you.uid));
+  });
+
   await test('QR del link: /qr.svg y /qr.png responden con imagen', async () => {
     const svg = await fetch(URL + '/qr.svg');
     assert.strictEqual(svg.status, 200);

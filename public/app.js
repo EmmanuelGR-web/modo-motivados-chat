@@ -271,6 +271,13 @@
     if (p && p.uid && !p.host) S.known.set(p.uid, { uid: p.uid, name: p.name, avatar: p.avatar });
   }
 
+  // El expositor (o el equipo de expositores) aparece como un contacto fijo para mensajes privados
+  const HOST = 'host';
+  const hostPeer = () => ({ uid: HOST, name: S.room.hostLabel || 'Expositor', avatar: 'host', host: true });
+  const hostOnline = () => (S.room.hostsOnline || 0) > 0;
+  const peerOf = (uid) => (uid === HOST ? hostPeer() : S.known.get(uid));
+  const isOnlinePeer = (uid) => (uid === HOST ? hostOnline() : S.users.some((u) => u.uid === uid));
+
   const isBlocked = (uid) => !!(S.me && S.me.blocked.includes(uid));
   const norm = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
@@ -281,6 +288,17 @@
     const box = $('#users-list');
     box.replaceChildren();
     const shown = list.filter((u) => !term || norm(u.name).includes(term));
+    const hp = hostPeer();
+    if (hostOnline() && (!term || norm(hp.name).includes(term) || 'expositor'.includes(term))) {
+      box.append(
+        h('button', { type: 'button', class: 'user-row host-row', title: 'Enviar mensaje privado al expositor', onclick: () => openDM(HOST) },
+          MM.avatar('host', 36),
+          h('span', { class: 'u-name', text: hp.name }),
+          h('span', { class: 'host-tag', text: 'EXPOSITOR' }),
+          h('span', { class: 'u-flag', title: 'Mensaje privado', text: '💬' })
+        )
+      );
+    }
     if (!shown.length) box.append(h('div', { class: 'empty', text: term ? 'Nadie con ese nombre.' : 'Todavía no hay nadie más.' }));
     shown.forEach((u) => {
       const mine = S.me && u.uid === S.me.uid;
@@ -318,6 +336,7 @@
   }
 
   function openUserMenu(uid) {
+    if (uid === HOST) return openDM(HOST);
     const p = S.known.get(uid);
     if (!p || (S.me && uid === S.me.uid)) return;
     const online = S.users.some((u) => u.uid === uid);
@@ -368,7 +387,7 @@
   function ensureDM(uid) {
     let c = S.dms.get(uid);
     if (!c) {
-      c = { peer: S.known.get(uid) || { uid, name: 'Usuario', avatar: 0 }, msgs: [], unread: 0, open: true };
+      c = { peer: peerOf(uid) || { uid, name: 'Usuario', avatar: 0 }, msgs: [], unread: 0, open: true };
       S.dms.set(uid, c);
     }
     c.open = true;
@@ -399,7 +418,7 @@
     );
     for (const [uid, c] of S.dms) {
       if (!c.open) continue;
-      c.peer = S.known.get(uid) || c.peer;
+      c.peer = peerOf(uid) || c.peer;
       nav.append(
         h('button', { type: 'button', class: 'tab' + (S.tab === uid ? ' on' : ''), onclick: () => setTab(uid) },
           MM.avatar(c.peer.avatar, 22),
@@ -420,7 +439,9 @@
       head.replaceChildren(
         MM.avatar(c.peer.avatar, 34),
         h('span', { class: 'dh-name', text: c.peer.name }),
-        h('button', { type: 'button', class: 'btn btn-sm', text: '⋯ Opciones', onclick: () => openUserMenu(S.tab) })
+        S.tab === HOST
+          ? h('span', { class: 'host-tag', text: 'EXPOSITOR' })
+          : h('button', { type: 'button', class: 'btn btn-sm', text: '⋯ Opciones', onclick: () => openUserMenu(S.tab) })
       );
     }
   }
@@ -485,14 +506,14 @@
     if (!own && !host) {
       row.append(h('button', { type: 'button', class: 'av-btn', 'aria-label': 'Opciones de ' + f.name, onclick: () => openUserMenu(f.uid) }, MM.avatar(f.avatar, 36)));
     } else if (host) {
-      row.append(MM.avatar('host', 36));
+      row.append(h('button', { type: 'button', class: 'av-btn', 'aria-label': 'Mensaje privado al expositor', onclick: () => openDM(HOST) }, MM.avatar('host', 36)));
     }
 
     const nameBtn = own
       ? null
       : h('button', {
           type: 'button', class: 'b-name ' + (host ? 'nc-host' : 'nc' + MM.colorIdx(f.uid)),
-          onclick: () => !host && openUserMenu(f.uid),
+          onclick: () => (host ? openDM(HOST) : openUserMenu(f.uid)),
         }, f.name, host ? h('span', { class: 'host-tag', text: 'EXPOSITOR' }) : null);
     row.append(bubbleBody(m, nameBtn));
     return row;
@@ -521,7 +542,10 @@
       S.messages.forEach((m) => msgsEl.append(buildPublic(m)));
     } else {
       const c = S.dms.get(S.tab);
-      if (!c.msgs.length) msgsEl.append(h('div', { class: 'empty', text: 'Conversación privada con ' + c.peer.name + '. Solo la ven ustedes dos 🔒' }));
+      if (!c.msgs.length)
+        msgsEl.append(h('div', { class: 'empty', text: S.tab === HOST
+          ? 'Escribile al expositor por privado: tu mensaje no aparece en la sala 🔒'
+          : 'Conversación privada con ' + c.peer.name + '. Solo la ven ustedes dos 🔒' }));
       c.msgs.forEach((m) => msgsEl.append(buildDM(m)));
     }
     if (stick) scrollBottom();
@@ -561,7 +585,7 @@
 
     if (S.tab !== 'room') {
       const c = S.dms.get(S.tab);
-      const online = S.users.some((u) => u.uid === S.tab);
+      const online = isOnlinePeer(S.tab);
       if (isBlocked(S.tab)) {
         composer.classList.add('hidden');
         note.classList.remove('hidden');
@@ -571,10 +595,10 @@
         );
         b = null;
       } else if (!online && canType) {
-        b = { cls: 'info', text: c.peer.name + ' no está en la sala ahora.' };
+        b = { cls: 'info', text: S.tab === HOST ? 'El expositor no está conectado ahora.' : c.peer.name + ' no está en la sala ahora.' };
         canType = false;
       } else if (!b) {
-        b = { cls: 'info', text: '🔒 Mensaje privado: solo lo ven ustedes dos.' };
+        b = { cls: 'info', text: S.tab === HOST ? '🔒 Mensaje privado al expositor: no aparece en la sala.' : '🔒 Mensaje privado: solo lo ven ustedes dos.' };
       }
     }
 
@@ -728,6 +752,7 @@
   });
 
   sk.on('dm:failed', ({ to, reason }) => {
+    if (to === HOST && reason === 'offline') return MM.toast('El expositor no está conectado ahora.', 3500);
     const t = {
       you_blocked: 'Tenés bloqueado a este usuario. Desbloquealo para escribirle.',
       not_receiving: 'Este usuario no está recibiendo mensajes tuyos.',
